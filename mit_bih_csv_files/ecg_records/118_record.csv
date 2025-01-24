@@ -1,0 +1,2 @@
+"record_name, n_leads, Age, Sex, sig_len, ftm, skew, byte_offset, adc_gain, baseline, units, adc_res, adc_zero, init_value, checksum, block_size"
+"118, 2, 69, M, 650000, ['212', '212'], [None, None], [None, None], [200.0, 200.0], [1024, 1024], ['mV', 'mV'], [11, 11], [1024, 1024], [857, 921], [8669, -25621], [0, 0]"
