@@ -1,0 +1,56 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from torch.utils.data import TensorDataset, DataLoader
+from sklearn.preprocessing import StandardScaler
+from model_architectures import FullyConnectedNetwork
+from DummyExperiment.pytorch_mlp_framework.arg_extractor import get_args
+import numpy as np
+import torch
+from experiment_builder import ExperimentBuilder
+
+args = get_args()  # get arguments from command line
+rng = np.random.RandomState(seed=args.seed)  # set the seeds for the experiment
+torch.manual_seed(seed=args.seed)  # sets pytorch's seed
+ecg_data = pd.read_csv(args.dataset_path)
+
+# Separate features and target
+X = ecg_data.iloc[:, :-1].values  # All columns except the last one
+y = ecg_data.iloc[:, -1].str.strip().replace({'N': 0, 'A': 1}).values  # Last column, remove spaces and replace labels
+
+# Standardize features
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+
+# Split data into train, validation, and test sets
+X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=args.seed)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=args.seed)
+
+# Ensure that the numpy arrays are of type float32 for X and int64 for y
+X_train = np.array(X_train, dtype=np.float32)
+y_train = np.array(y_train, dtype=np.int64)
+
+X_val = np.array(X_val, dtype=np.float32)
+y_val = np.array(y_val, dtype=np.int64)
+
+X_test = np.array(X_test, dtype=np.float32)
+y_test = np.array(y_test, dtype=np.int64)
+
+# Create DataLoaders
+train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(y_train)), batch_size=args.batch_size, shuffle=True)
+val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), batch_size=args.batch_size, shuffle=False)
+test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=args.batch_size, shuffle=False)
+# Define the model
+# Define the model
+model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
+
+# Build and run the experiment
+experiment = ExperimentBuilder(network_model=model,
+                                experiment_name=args.experiment_name,
+                                num_epochs=args.num_epochs,
+                                weight_decay_coefficient=args.weight_decay_coefficient,
+                                use_gpu=args.use_gpu,
+                                continue_from_epoch=args.continue_from_epoch,
+                                train_data=train_data,
+                                val_data=val_data,
+                                test_data=test_data)
+experiment_metrics, test_metrics = experiment.run_experiment()
