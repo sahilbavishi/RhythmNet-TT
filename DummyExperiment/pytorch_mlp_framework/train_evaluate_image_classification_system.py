@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from model_architectures import FullyConnectedNetwork
-from DummyExperiment.pytorch_mlp_framework.arg_extractor import get_args
+from arg_extractor import get_args
 import numpy as np
 import torch
 from experiment_builder import ExperimentBuilder
@@ -14,8 +14,11 @@ torch.manual_seed(seed=args.seed)  # sets pytorch's seed
 ecg_data = pd.read_csv(args.dataset_path)
 
 # Separate features and target
-X = ecg_data.iloc[:, :-1].values  # All columns except the last one
-y = ecg_data.iloc[:, -1].str.strip().replace({'N': 0, 'A': 1}).values  # Last column, remove spaces and replace labels
+X = ecg_data.iloc[:, 1:-2].values  # All columns except the last one
+# y = ecg_data.iloc[:, -1].str.strip().replace({'N': 0, 'A': 1}).values  # Last column, remove spaces and replace labels
+
+y = (ecg_data.iloc[:, -2].astype(str).str.strip() != 'N').astype(int).values
+y2 = ecg_data.iloc[:, -1]
 
 # Standardize features
 scaler = StandardScaler()
