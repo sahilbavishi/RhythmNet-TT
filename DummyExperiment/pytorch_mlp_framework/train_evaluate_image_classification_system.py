@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.preprocessing import StandardScaler
-from model_architectures import FullyConnectedNetwork
+from model_architectures import FullyConnectedNetwork, Quite_A_Big_Model
 from arg_extractor import get_args
 import numpy as np
 import torch
@@ -44,7 +44,8 @@ val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), b
 test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=args.batch_size, shuffle=False)
 # Define the model
 # Define the model
-model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
+# model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
+model = Quite_A_Big_Model(input_shape=(args.batch_size, 1, args.num_features), hidden_units=64, output_classes=args.num_classes)
 
 # Build and run the experiment
 experiment = ExperimentBuilder(network_model=model,
