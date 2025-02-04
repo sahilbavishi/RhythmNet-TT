@@ -50,36 +50,37 @@ class Bottleneck:
 
         x = torch.zeros((self.input_shape))
         out = x
-        print(out.shape)
+        print("\n bottleneck 1 input shape: ",out.shape)
         self.layer_dict['fist_bottleneck_conv1d'] = nn.Conv1d(in_channels = out.shape[1], out_channels = self.c, kernel_size = 1, stride = self.s, padding = 0)
         self.layer_dict['bn0'] = nn.BatchNorm1d(num_features= self.c)
-        print(out.shape)
+        
         out = self.layer_dict['fist_bottleneck_conv1d'].forward(out)
         out = self.layer_dict['bn0'].forward(out)
         out = F.relu(out)
-        print(out.shape)
+        print("\n bottleneck 1st layer ouput shape: ",out.shape)
 
         self.layer_dict['depthwise_bottleneck_conv1d'] = nn.Conv1d(in_channels = out.shape[1], out_channels = self.k * out.shape[1], groups = out.shape[1], kernel_size = 3, stride = self.s, padding = 1)
         
 
 
         out = self.layer_dict['depthwise_bottleneck_conv1d'].forward(out)
-        print(out.shape)
+        print("\n bottleneck depthwise 2nd layer ouput shape: ",out.shape)
         self.layer_dict['bn1'] = nn.BatchNorm1d(num_features= out.shape[1])
 
         out = self.layer_dict['bn1'].forward(out)
         out = F.relu(out)
-        print(out.shape)
+        
         self.layer_dict['last_bottleneck_conv1d'] = nn.Conv1d(in_channels = out.shape[1], out_channels = self.c, kernel_size = 1, stride = self.s, padding = 0)
         self.layer_dict['bn2'] = nn.BatchNorm1d(num_features= self.c)
-        print(out.shape)
+        
         out = self.layer_dict['last_bottleneck_conv1d'].forward(out)
         out = self.layer_dict['bn2'].forward(out)
-
+        print("\n bottleneck 3rd layer ouput shape: ",out.shape)
+        
         self.layer_dict['SE'] = SqueezeExcitation(self.c, 16)
         out = self.layer_dict['SE'](out)
         
-        print(out.shape)
+        print("\n bottleneck ouput shape: ",out.shape)
         out = out + x
 
         return out
@@ -139,9 +140,10 @@ class Quite_A_Big_Model(nn.Module):
         out = x
 
         self.layer_dict['fist_conv1d'] = nn.Conv1d(in_channels = out.shape[1], out_channels = 1, kernel_size = 1, stride = 2, padding = 0)
-        self.layer_dict['bn0_outside'] = nn.BatchNorm1d(num_features= self.input_shape[-1])
         
         out = self.layer_dict['fist_conv1d'].forward(out)
+
+        self.layer_dict['bn0_outside'] = nn.BatchNorm1d(num_features= out.shape[1])
         out = self.layer_dict['bn0_outside'].forward(out)  #ERRROOOORRRRR
         out = F.relu(out)
 
@@ -150,7 +152,8 @@ class Quite_A_Big_Model(nn.Module):
         for i in range(0, 6):
             ctr = 2
             while bottleneckRepeats[i] > 0:
-                self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats}'] = Bottleneck(input_shape=out.shape(), k = 6, c = cList[i], n = bottleneckRepeats[i], s = ctr )
+                print("Bottleneck ",i)
+                self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats}'] = Bottleneck(input_shape=out.shape, k = 6, c = cList[i], n = bottleneckRepeats[i], s = ctr )
                 ctr = ctr - 1 # creates the bottleneck
             
                 #runs the values through the created bottleneck as it was created
