@@ -153,20 +153,19 @@ class Bottleneck(nn.Module):
 
 
 
-class Quite_A_Big_Model(nn.Module):
-    def __init__(self, input_shape, hidden_units, output_classes):
+class cnnBackbone(nn.Module):
+    def __init__(self, input_shape, hidden_units, output_classes, d_model):
         """
         Initializes a fully connected network for tabular data.
         :param input_features: Number of input features (columns in the dataset).
         :param hidden_units: Number of units in the hidden layer.
         :param output_classes: Number of output classes (e.g., N and A).
         """
-        super(Quite_A_Big_Model, self).__init__()
+        super(cnnBackbone, self).__init__()
         self.input_shape = input_shape
-        self.fc1 = nn.Linear(input_shape[-1], hidden_units)  # First layer
-        self.fc2 = nn.Linear(hidden_units, output_classes)  # Output layer
-        self.relu = nn.ReLU()  # Activation function
-        self.softmax = nn.Softmax(dim=1)  # For multi-class classification
+        self.hidden_units = hidden_units
+        self.output_classes = output_classes
+        self.d_model = d_model
         self.build_module()
 
     def build_module(self):
@@ -174,6 +173,7 @@ class Quite_A_Big_Model(nn.Module):
         x = torch.zeros(self.input_shape)
         out = x
 
+        # first conv
         self.layer_dict['fist_conv1d'] = nn.Conv1d(in_channels = out.shape[1], out_channels = 1, kernel_size = 1, stride = 2, padding = 0)
         
         out = self.layer_dict['fist_conv1d'].forward(out)
@@ -182,6 +182,7 @@ class Quite_A_Big_Model(nn.Module):
         out = self.layer_dict['bn0_outside'].forward(out)  #ERRROOOORRRRR
         out = F.relu(out)
 
+        # bottlenecks
         bottleneckRepeats = [1, 2, 2, 2, 2, 1]
         strideList=[2, 2, 2, 2, 2, 1]
         cList = [8, 16, 32, 64, 128, 256]
@@ -194,6 +195,17 @@ class Quite_A_Big_Model(nn.Module):
                 #runs the values through the created bottleneck as it was created
                 out = self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats[i]}'].forward(out)
                 bottleneckRepeats[i]-=1
+
+        # last conv
+        self.layer_dict['last_conv1d'] = nn.Conv1d(in_channels = out.shape[1], out_channels = self.d_model, kernel_size = 1, stride = 1, padding = 0)
+        
+        out = self.layer_dict['last_conv1d'].forward(out)
+
+        self.layer_dict['bn1_outside'] = nn.BatchNorm1d(num_features= out.shape[1])
+        out = self.layer_dict['bn1_outside'].forward(out)
+        out = F.relu(out)
+
+        print("Output shape: ",out.shape)
 
     def forward(self, x):
         """
@@ -214,8 +226,10 @@ class Quite_A_Big_Model(nn.Module):
                 bottleneckRepeats[i]-=1
 
 
-        x = self.relu(self.fc1(out))
-        x = self.softmax(self.fc2(x))
+        # last conv
+        out = self.layer_dict['last_conv1d'].forward(out)
+        out = self.layer_dict['bn1_outside'].forward(out)
+        out = F.relu(out)
 
         return 
 
