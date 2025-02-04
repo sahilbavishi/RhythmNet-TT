@@ -35,6 +35,99 @@ class FullyConnectedNetwork(nn.Module):
         self.fc1.reset_parameters()
         self.fc2.reset_parameters()
 
+class FeedForwardModule(nn.Module):
+    def __init__(self, input_shape,hidden_units,num_classes,finallayer="softmax"):
+        """Type of feedforward network that has 2 layers, and you can define using softmax or just a regression model"""
+        super(FeedForwardModule,self).__init__()
+        self.input_shape=input_shape
+        self.hidden_units=hidden_units
+        self.num_classes=num_classes
+        self.finallayer=finallayer
+        self.BuildModule()
+    def BuildModule(self):
+        x=torch.zeros(self.input_shape)
+        print("Building module with input shape ", x.shape)
+        self.layer_dict=nn.ModuleDict()
+        self.layer_dict["FF0"]=nn.Linear(x.shape[-1],self.hidden_units)
+        x=self.layer_dict["FF0"].forward(x)
+        print("shape after 1st layer: ",x.shape)
+        self.layer_dict["bn0"]=nn.BatchNorm1d(x.shape[1])
+        x=self.layer_dict["bn0"].forward(x)
+        print("shape after batch normalisation layer: ", x.shape)
+        output_num=1
+        if self.finallayer=="softmax":
+            #Change final layer size to number of classes, if this is a classification task
+            output_num=self.num_classes
+        self.layer_dict["FF1"]=nn.Linear(x.shape[-1],output_num)
+        x=self.layer_dict["FF1"].forward(x)
+        print("shape after final layer: ",x.shape)
+        print("final x shape: ",x.shape)
+        return x
+    def forward(self,input):
+        x=input
+        x=self.layer_dict["FF0"].forward(x)
+        x=F.relu(self.layer_dict["bn0"].forward(x))
+        x=self.layer_dict["FF1"].forward(x)
+
+        if self.finallayer=="softmax":
+            x=F.softmax(x,dim=2)
+        return x
+
+class MultipleOutputFFN(nn.Module):
+    def __init__(self, input_dim,output_dim):
+        """Final layer of model - takes input and produces classes of output_dim along with a last input of position"""
+        super(MultipleOutputFFN,self).__init__()
+        self.input_dim=input_dim
+        self.output_dim=output_dim
+        self.BuildModule()
+    def BuildModule(self):
+        x=torch.zeros(self.input_dim)
+        self.layer_dict=nn.ModuleDict()
+        self.layer_dict["Locations"]=FeedForwardModule(self.input_dim,12,self.output_dim,finallayer="not")
+        out1=self.layer_dict["Locations"].forward(x)
+        print("output1 shape: ",out1.shape)
+        self.layer_dict["Classification"]=FeedForwardModule(self.input_dim,12,self.output_dim)
+        out2=self.layer_dict["Classification"].forward(x)
+        print("output2 shape: ",out2.shape)
+        outfinal=torch.cat([out1,out2],dim=2)
+        print("output final shape: ",outfinal.shape)
+        return outfinal
+    def forward(self,input):
+        x=input
+        out1=self.layer_dict["Locations"].forward(x)
+        out2=self.layer_dict["Classification"].forward(x)
+        outfinal=torch.cat([out1,out2],dim=2)
+        return outfinal
+
+class SqueezeExcite(nn.Module):
+    def __init__(self, input_shape,reduction=16):
+        """Squeeze and Excitement module for 1 dimensional data"""
+        super(SqueezeExcite,self).__init__()
+        self.input_shape=input_shape
+        self.red=reduction
+        self.BuildModule()
+    def BuildModule(self):
+        out=torch.zeros(self.input_shape)
+        self.layer_dict=nn.ModuleDict()
+        bottleneck=max(out.shape[1]//self.red,1)
+        self.layer_dict["Avg_Pooling"]=nn.AvgPool1d(1)
+        self.layer_dict["Conv1D"]=nn.Conv1d(out.shape[1],bottleneck,kernel_size=1,padding=0)
+        self.layer_dict["Relu"]=nn.ReLU(True)
+        self.layer_dict["Conv1d2"]=nn.Conv1d(bottleneck,out.shape[1],kernel_size=1,padding=0)
+        self.layer_dict["Sigmoid"]=nn.Sigmoid()
+    def forward(self,input):
+        out=input
+        out=self.layer_dict["Avg_Pooling"].forward(out)
+        print(out.shape)
+        out=self.layer_dict["Conv1D"].forward(out)
+        out=self.layer_dict["Relu"].forward(out)
+        out=self.layer_dict["Conv1d2"].forward(out)
+        out=self.layer_dict["Sigmoid"].forward(out)
+        return out*input
+
+
+
+
 class SEModule(nn.Module):
     def __init__(self, channels, divide=4):
         super(SEModule, self).__init__()
