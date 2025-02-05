@@ -427,8 +427,9 @@ class Quite_Big_Model(nn.Module):
 
         print("Backbone Output Shape: ",out.shape)
 
-        #Transformer Layer
-        self.layer_dict["Transformer"]=nn.Transformer(self.d_model,nhead=self.num_heads,batch_first=True)
+        #Transformer Layer - I'm not sure if the d_model is meant to be the same as our d_model, but it doesn't work if I try that
+        ##self.layer_dict["Transformer"]=nn.Transformer(d_model=self.d_model,nhead=self.num_heads,batch_first=True)
+        self.layer_dict["Transformer"]=nn.Transformer(d_model=out.shape[-1],nhead=self.num_heads,batch_first=True)
 
         out=self.layer_dict["Transformer"].forward(out,out)
 
@@ -440,3 +441,12 @@ class Quite_Big_Model(nn.Module):
         out=self.layer_dict["FullyConnected"].forward(out)
 
         print("Final Ouput Shape: ",out.shape)
+    def forward(self,Input):
+        if Input.shape!=self.input_shape:
+            #Just check we are giving the right input into the model
+            raise ValueError("Error: Input supplied is not the same size as intialised")
+        out=self.layer_dict["Cnn_Backbone"].forward(Input)
+        out=self.layer_dict["Transformer"].forward(out,out)#Not sure if this is the right way to forward pass the transformer
+        out=self.layer_dict["FullyConnected"].forward(out)
+
+        return out
