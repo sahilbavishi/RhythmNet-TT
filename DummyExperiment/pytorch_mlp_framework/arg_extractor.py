@@ -22,7 +22,7 @@ def get_args():
     parser.add_argument('--num_epochs', nargs="?", type=int, default=50, help='Number of epochs for training')
     parser.add_argument('--num_features', nargs="?", type=int, default=1080, help='Number of input features (columns in the dataset)')
     parser.add_argument('--num_classes', nargs="?", type=int, default=2, help='Number of output classes (e.g., N and A)')
-    parser.add_argument('--dataset_path', nargs="?", type=str, default='MIT30Sec.csv', help='Path to the ECG dataset')
+    parser.add_argument('--dataset_path', nargs="?", type=str, default='MIT3Sec.csv', help='Path to the ECG dataset')
     parser.add_argument('--weight_decay_coefficient', nargs="?", type=float, default=0,
                         help='Weight decay to use for Adam')
     # Experiment parameters

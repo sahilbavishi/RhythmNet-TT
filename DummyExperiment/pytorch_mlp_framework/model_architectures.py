@@ -85,6 +85,15 @@ class FeedForwardModule(nn.Module):
         if self.finallayer=="softmax":
             x=F.softmax(x,dim=2)
         return x
+    def reset_parameters(self):
+        """
+        Re-initialize the network parameters.
+        """
+        for item in self.layer_dict.children():
+            try:
+                item.reset_parameters()
+            except:
+                pass
 
 class MultipleOutputFFN(nn.Module):
     def __init__(self, input_dim,hidden_units,num_classes):
@@ -123,6 +132,15 @@ class MultipleOutputFFN(nn.Module):
         out2=self.layer_dict["Classification"].forward(x)
         outfinal=torch.cat([out1,out2],dim=2)
         return outfinal
+    def reset_parameters(self):
+        """
+        Re-initialize the network parameters.
+        """
+        for item in self.layer_dict.children():
+            try:
+                item.reset_parameters()
+            except:
+                pass
 
 class SqueezeExcite(nn.Module):
     def __init__(self, input_shape,reduction=16):
@@ -158,6 +176,15 @@ class SqueezeExcite(nn.Module):
         out=self.layer_dict["Conv1d2"].forward(out)
         out=self.layer_dict["Sigmoid"].forward(out)
         return out*input
+    def reset_parameters(self):
+        """
+        Re-initialize the network parameters.
+        """
+        for item in self.layer_dict.children():
+            try:
+                item.reset_parameters()
+            except:
+                pass
 
 
 
@@ -177,6 +204,8 @@ class SEModule(nn.Module):
     def forward(self, input):
         x = self.se(input)
         return input * x
+    def reset_parameters(self):
+        self.se.reset_parameters()
 
 class Bottleneck(nn.Module):
     def __init__(self, input_shape, k, c, n, s):
@@ -288,8 +317,6 @@ class Bottleneck(nn.Module):
             except:
                 pass
 
-        self.logit_linear_layer.reset_parameters()
-
 
 
 
@@ -382,8 +409,8 @@ class cnnBackbone(nn.Module):
         """
         Resets the network parameters for reinitialization.
         """
-        self.fc1.reset_parameters()
-        self.fc2.reset_parameters()
+        for layerkey in self.layer_dict.keys():
+            self.layer_dict[layerkey].reset_parameters()
 
 
 class Quite_Big_Model(nn.Module):
@@ -442,11 +469,16 @@ class Quite_Big_Model(nn.Module):
 
         print("Final Ouput Shape: ",out.shape)
     def forward(self,Input):
-        if Input.shape!=self.input_shape:
+        Input=Input.unsqueeze(1) #Need to add this as the data loader does not add the channel term
+        if Input.shape!=torch.zeros(self.input_shape).shape:
             #Just check we are giving the right input into the model
-            raise ValueError("Error: Input supplied is not the same size as intialised")
+            raise ValueError(f"Error: Input supplied ({Input.shape}) is not the same size as intialised ({self.input_shape})")
         out=self.layer_dict["Cnn_Backbone"].forward(Input)
         out=self.layer_dict["Transformer"].forward(out,out)#Not sure if this is the right way to forward pass the transformer
         out=self.layer_dict["FullyConnected"].forward(out)
 
         return out
+    def reset_parameters(self):
+        self.layer_dict["Cnn_Backbone"].reset_parameters()
+        #self.layer_dict["Transformer"].reset_parameters()
+        self.layer_dict["FullyConnected"].reset_parameters()
