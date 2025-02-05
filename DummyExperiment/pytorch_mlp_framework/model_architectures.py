@@ -37,7 +37,20 @@ class FullyConnectedNetwork(nn.Module):
 
 class FeedForwardModule(nn.Module):
     def __init__(self, input_shape,hidden_units,num_classes,finallayer="softmax"):
-        """Type of feedforward network that has 2 layers, and you can define using softmax or just a regression model"""
+        """
+        Initializes a feed-forward network that can be either regression or classification
+        
+        Parameters
+        ----------
+        input_shape
+            Shape of the input
+        hidden_units
+            Number of hidden units in the hidden layer
+        num_classes
+            Number of outputs
+        finallayer
+            Determines the type of final layer in the model - softmax is classification, if changed just produces regression
+        """
         super(FeedForwardModule,self).__init__()
         self.input_shape=input_shape
         self.hidden_units=hidden_units
@@ -74,19 +87,31 @@ class FeedForwardModule(nn.Module):
         return x
 
 class MultipleOutputFFN(nn.Module):
-    def __init__(self, input_dim,output_dim):
-        """Final layer of model - takes input and produces classes of output_dim along with a last input of position"""
+    def __init__(self, input_dim,hidden_units,num_classes):
+        """
+        Initializes a cnn backbone for the feature extraction for the transformer
+        
+        Parameters
+        ----------
+        input_shape
+            Shape of the input
+        hidden_units
+            Number of hidden units used 
+        num_classes
+            Number of classes model has to predict (N,A etc.)
+        """
         super(MultipleOutputFFN,self).__init__()
         self.input_dim=input_dim
-        self.output_dim=output_dim
+        self.hidden_units=hidden_units
+        self.output_dim=num_classes
         self.BuildModule()
     def BuildModule(self):
         x=torch.zeros(self.input_dim)
         self.layer_dict=nn.ModuleDict()
-        self.layer_dict["Locations"]=FeedForwardModule(self.input_dim,12,self.output_dim,finallayer="not")
+        self.layer_dict["Locations"]=FeedForwardModule(self.input_dim,self.hidden_units,self.output_dim,finallayer="not")
         out1=self.layer_dict["Locations"].forward(x)
         print("output1 shape: ",out1.shape)
-        self.layer_dict["Classification"]=FeedForwardModule(self.input_dim,12,self.output_dim)
+        self.layer_dict["Classification"]=FeedForwardModule(self.input_dim,self.hidden_units,self.output_dim)
         out2=self.layer_dict["Classification"].forward(x)
         print("output2 shape: ",out2.shape)
         outfinal=torch.cat([out1,out2],dim=2)
@@ -101,7 +126,16 @@ class MultipleOutputFFN(nn.Module):
 
 class SqueezeExcite(nn.Module):
     def __init__(self, input_shape,reduction=16):
-        """Squeeze and Excitement module for 1 dimensional data"""
+        """
+        Initializes a squeeze and excitement module for the bottleneck 
+        
+        Parameters
+        ----------
+        input_shape
+            Shape of the input
+        reduction
+            Size of reduction within the squeeze part
+        """
         super(SqueezeExcite,self).__init__()
         self.input_shape=input_shape
         self.red=reduction
@@ -146,6 +180,22 @@ class SEModule(nn.Module):
 
 class Bottleneck(nn.Module):
     def __init__(self, input_shape, k, c, n, s):
+        """
+        Initializes a bottleneck module
+        
+        Parameters
+        ----------
+        input_shape
+            Shape of the input
+        k
+            Size of final channel output (hyper-parameter)
+        c
+            Output channels of bottleneck layer
+        n
+            N
+        s
+            Stride length used in first layer
+        """
         super(Bottleneck,self).__init__()
         self.input_shape = input_shape
         self.k = k
@@ -191,13 +241,11 @@ class Bottleneck(nn.Module):
 
         print("Output before SE",out.shape)
 
-        out = out.unsqueeze(-1)
-
-        print("Output before SE after change",out.shape)
-        self.layer_dict['SE'] = SqueezeExcitation(input_channels = self.c, squeeze_channels = 4)
+        
+        self.layer_dict['SE'] = SqueezeExcite(input_shape=out.shape,reduction=4) #Homemade squeeze excite function
         out = self.layer_dict['SE'](out)
 
-        out = out.squeeze(-1)
+        
         
         print("\n bottleneck ouput shape: ",out.shape)
 
@@ -220,9 +268,9 @@ class Bottleneck(nn.Module):
         out = self.layer_dict['last_bottleneck_conv1d'].forward(out)
         out = self.layer_dict['bn2'].forward(out)
         
-        out = out.unsqueeze(-1)
+        
         out = self.layer_dict['SE'](out)
-        out = out.squeeze(-1)
+        
 
         if(out.shape == x.shape):
             out = out + x
@@ -247,17 +295,21 @@ class Bottleneck(nn.Module):
 
 
 class cnnBackbone(nn.Module):
-    def __init__(self, input_shape, hidden_units, output_classes, d_model):
+    def __init__(self, input_shape, d_model):
         """
-        Initializes a fully connected network for tabular data.
-        :param input_features: Number of input features (columns in the dataset).
-        :param hidden_units: Number of units in the hidden layer.
-        :param output_classes: Number of output classes (e.g., N and A).
+        Initializes a cnn backbone for the feature extraction for the transformer
+        
+        Parameters
+        ----------
+        input_shape
+            Shape of the input
+        d_model
+            Size of final channel output (hyper-parameter)
         """
         super(cnnBackbone, self).__init__()
         self.input_shape = input_shape
-        self.hidden_units = hidden_units
-        self.output_classes = output_classes
+        #self.hidden_units = hidden_units
+        #self.output_classes = output_classes
         self.d_model = d_model
         self.build_module()
 
@@ -324,7 +376,7 @@ class cnnBackbone(nn.Module):
         out = self.layer_dict['bn1_outside'].forward(out)
         out = F.relu(out)
 
-        return 
+        return out
 
     def reset_parameters(self):
         """
@@ -334,3 +386,57 @@ class cnnBackbone(nn.Module):
         self.fc2.reset_parameters()
 
 
+class Quite_Big_Model(nn.Module):
+    def __init__(self, input_shape ,d_model,transformer_heads,hidden_units,num_classes):
+        """
+        Initializes a quite big model - cnn backbone into transformer into fully connected networks
+        
+        Parameters
+        ----------
+        input_shape
+            Shape of the input
+        d_model
+            Dimension of model hyper-parameter
+        transformer_heads
+            Number of heads in transformer layer - needs to be a factor of d_model
+        hidden_units
+            Number of hidden units in fully connected networks
+        num_classes
+            Number of classes to predict
+        """
+        super(Quite_Big_Model,self).__init__()
+        self.input_shape=input_shape
+        self.d_model=d_model
+        if d_model/transformer_heads!=d_model//transformer_heads:
+            #If the d_model is not a multiple of transformer heads, return an error and exit
+            raise ValueError("Error: the d_model is not a multiple of the number of transformer heads")
+        self.num_heads=transformer_heads
+        self.hidden_units=hidden_units
+        self.num_classes=num_classes
+
+        self.build_module()
+    def build_module(self):
+        out=torch.zeros(self.input_shape)
+        self.layer_dict=nn.ModuleDict()
+        print(f"Initialising Quite A Big Model with input shape {self.input_shape}")
+
+        #CNN Backbone
+        self.layer_dict["Cnn_Backbone"]=cnnBackbone(out.shape,self.d_model)
+
+        out=self.layer_dict["Cnn_Backbone"].forward(out)
+
+        print("Backbone Output Shape: ",out.shape)
+
+        #Transformer Layer
+        self.layer_dict["Transformer"]=nn.Transformer(self.d_model,nhead=self.num_heads,batch_first=True)
+
+        out=self.layer_dict["Transformer"].forward(out,out)
+
+        print("Transformer Output Shape: ",out.shape)
+
+        #Final module
+        self.layer_dict["FullyConnected"]=MultipleOutputFFN(out.shape,self.hidden_units,self.num_classes)
+
+        out=self.layer_dict["FullyConnected"].forward(out)
+
+        print("Final Ouput Shape: ",out.shape)
