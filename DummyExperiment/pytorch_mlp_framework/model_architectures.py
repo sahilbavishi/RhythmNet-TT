@@ -469,9 +469,9 @@ class Quite_Big_Model(nn.Module):
         print("Final Ouput Shape: ",out.shape)
     def forward(self,Input):
         Input=Input.unsqueeze(1) #Need to add this as the data loader does not add the channel term
-        if Input.shape!=torch.zeros(self.input_shape).shape:
-            #Just check we are giving the right input into the model
-            raise ValueError(f"Error: Input supplied ({Input.shape}) is not the same size as intialised ({self.input_shape})")
+        #if Input.shape!=torch.zeros(self.input_shape).shape:
+        #    #Just check we are giving the right input into the model
+        #    raise ValueError(f"Error: Input supplied ({Input.shape}) is not the same size as intialised ({self.input_shape})")
         out=self.layer_dict["Cnn_Backbone"].forward(Input)
         out=self.layer_dict["Transformer"].forward(out,out)#Not sure if this is the right way to forward pass the transformer
         out=self.layer_dict["FullyConnected"].forward(out)
