@@ -86,8 +86,6 @@ class ExperimentBuilder(nn.Module):
 
         predicted_classes=torch.argmax(output[:,:,:-1],dim=-1)
         real_classes=torch.argmax(y[:,:,:-1],dim=-1)
-        print(predicted_classes)
-        print(real_classes)
         accuracy = (predicted_classes==real_classes).float().mean().item()
         return loss.item(), accuracy
 
