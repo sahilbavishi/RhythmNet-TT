@@ -23,7 +23,7 @@ Yvals=np.array(ecg_data.iloc[:,labelcol:].values) #All the labels
 
 def One_Hot(Input):
     """Function to one-hot encode a 1xn numpy array, returns an nx4 encoded variable"""
-    Classes=np.array(["N","S","V","F"])[:,np.newaxis] #N,S,V,F and empty classes - empty is just all 0s
+    Classes=np.array(["N","S","V","F",0])[:,np.newaxis] #N,S,V,F and empty classes
     return Classes.T==Input[:,np.newaxis]
 
 def ConvertClassandPos(Yinput):
@@ -79,7 +79,7 @@ val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), b
 test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=args.batch_size, shuffle=False)
 # Define the model
 # model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
-model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],d_model=6,transformer_heads=1,hidden_units=12,num_classes=4)
+model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],d_model=6,transformer_heads=1,hidden_units=12,num_classes=5)
 #model = Quite_Big_Model(input_shape=(args.batch_size, 1, args.num_features), hidden_units=64, output_classes=args.num_classes)
 
 # Build and run the experiment

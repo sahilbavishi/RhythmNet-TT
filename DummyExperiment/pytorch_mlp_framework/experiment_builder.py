@@ -45,7 +45,9 @@ class ExperimentBuilder(nn.Module):
             os.makedirs(self.experiment_saved_models)
 
         self.num_epochs = num_epochs
-        self.criterion = nn.CrossEntropyLoss().to(self.device)
+        #Two loss functions - one for position, one for class
+        self.classifier_criterion = nn.CrossEntropyLoss().to(self.device)
+        self.position_criterion=nn.CrossEntropyLoss().to(self.device)
 
         if continue_from_epoch >= 0:
             self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_model(
@@ -60,16 +62,17 @@ class ExperimentBuilder(nn.Module):
         self.train()
         x, y = x.float().to(self.device), y.long().to(self.device)
         output = self.model(x)
-        loss = self.criterion(output, y.type(torch.float32)) #convert to float32 to do the measuring
+        loss = self.classifier_criterion(output[:,:,:-1], y[:,:,:-1].type(torch.float32))+self.position_criterion(output[:,:,-1], y[:,:,-1].type(torch.float32)) #convert to float32 to do the measuring
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
         self.learning_rate_scheduler.step()
 
-        #Accuracy isn't working at the moment - need to fix it
-        """_, predicted = torch.max(output, 1)
-        accuracy = (predicted == y).float().mean().item()"""
-        accuracy=1
+        #Accuracy is just the class accuracy at the moment - nothing to do with the position
+        # _, predicted = torch.max(output[:,:,:-1], 2,keepdim=True)
+        predicted_classes=torch.argmax(output[:,:,:-1],dim=-1)
+        real_classes=torch.argmax(y[:,:,:-1],dim=-1)
+        accuracy = (predicted_classes==real_classes).float().mean().item()
         return loss.item(), accuracy
 
     def run_evaluation_iter(self, x, y):
@@ -77,9 +80,15 @@ class ExperimentBuilder(nn.Module):
         x, y = x.float().to(self.device), y.long().to(self.device)
         output = self.model(x)
 
-        loss = self.criterion(output, y)
-        _, predicted = torch.max(output, 1)
-        accuracy = (predicted == y).float().mean().item()
+        loss = self.classifier_criterion(output[:,:,:-1], y[:,:,:-1].type(torch.float32))+self.position_criterion(output[:,:,-1], y[:,:,-1].type(torch.float32)) #convert to float32 to do the measuring
+
+        #Accuracy is just the class accuracy at the moment - nothing to do with the position
+
+        predicted_classes=torch.argmax(output[:,:,:-1],dim=-1)
+        real_classes=torch.argmax(y[:,:,:-1],dim=-1)
+        print(predicted_classes)
+        print(real_classes)
+        accuracy = (predicted_classes==real_classes).float().mean().item()
         return loss.item(), accuracy
 
     def save_model(self, model_dir, model_name, epoch, best_val_model_idx, best_val_model_acc):
