@@ -170,7 +170,6 @@ class SqueezeExcite(nn.Module):
     def forward(self,input):
         out=input
         out=self.layer_dict["Avg_Pooling"].forward(out)
-        print(out.shape)
         out=self.layer_dict["Conv1D"].forward(out)
         out=self.layer_dict["Relu"].forward(out)
         out=self.layer_dict["Conv1d2"].forward(out)
