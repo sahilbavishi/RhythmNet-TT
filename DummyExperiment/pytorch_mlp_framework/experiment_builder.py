@@ -8,6 +8,7 @@ import numpy as np
 import time
 from storage_utils import save_statistics
 from matplotlib import pyplot as plt
+from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
 
 class ExperimentBuilder(nn.Module):
     def __init__(self, network_model, experiment_name, num_epochs, train_data, val_data,
@@ -30,8 +31,23 @@ class ExperimentBuilder(nn.Module):
         self.val_data = val_data
         self.test_data = test_data
 
+        '''old learning rate scheduler
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=weight_decay_coefficient)
         self.learning_rate_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_epochs, eta_min=0.00002)
+        '''
+        #new learning rate scheduler
+        # Define the optimizer
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=weight_decay_coefficient)
+        
+        # Warm-up scheduler (first 10 epochs)
+        warmup_scheduler = LinearLR(self.optimizer, start_factor=0.01, total_iters=10)
+        
+        # Cosine annealing scheduler (after warm-up)
+        cosine_scheduler = CosineAnnealingLR(self.optimizer, T_max=num_epochs - 10, eta_min=0.00002)
+        
+        # Combine warm-up and cosine annealing
+        self.learning_rate_scheduler = SequentialLR(self.optimizer, schedulers=[warmup_scheduler, cosine_scheduler], milestones=[10])
+
 
         self.experiment_folder = os.path.abspath(experiment_name)
         self.experiment_logs = os.path.join(self.experiment_folder, "result_outputs")
