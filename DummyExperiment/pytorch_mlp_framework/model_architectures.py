@@ -411,9 +411,45 @@ class cnnBackbone(nn.Module):
         for layerkey in self.layer_dict.keys():
             self.layer_dict[layerkey].reset_parameters()
 
+# Transformer adapted for our task
+class ECGTransformer(nn.Module):
+    def __init__(self, d_model, num_heads, num_queries, num_encoder_layers, num_decoder_layers):
+        super(ECGTransformer, self).__init__()
+        
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.num_queries = num_queries
+        
+        # Transformer components
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads, batch_first=True)
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_encoder_layers)
+        
+        self.decoder_layer = nn.TransformerDecoderLayer(d_model=d_model, nhead=num_heads, batch_first=True)
+        self.decoder = nn.TransformerDecoder(self.decoder_layer, num_layers=num_decoder_layers)
+        
+        # Learnable object queries
+        self.object_queries = nn.Parameter(torch.rand(num_queries, d_model))
+        
+    def forward(self, features):
+        """
+        :param features: Extracted features from ECG signals (batch_size, seq_len, d_model)
+        :return: Predicted classes and positions of heartbeats
+        """
+        # Encoder
+        encoded_features = self.encoder(features)  # Shape: (batch_size, seq_len, d_model)
+        
+        # Prepare object queries for each sample in the batch
+        batch_size = features.size(0)
+        queries = self.object_queries.unsqueeze(0).repeat(batch_size, 1, 1)  # Shape: (batch_size, num_queries, d_model)
+        
+        # Decoder
+        decoded_features = self.decoder(queries, encoded_features)  # Cross-attention with encoder output
+        
+        return decoded_features
+
 
 class Quite_Big_Model(nn.Module):
-    def __init__(self, input_shape ,d_model,transformer_heads,hidden_units,num_classes):
+    def __init__(self, input_shape ,d_model,transformer_heads,hidden_units,num_classes,N_q=6):
         """
         Initializes a quite big model - cnn backbone into transformer into fully connected networks
         
@@ -439,6 +475,7 @@ class Quite_Big_Model(nn.Module):
         self.num_heads=transformer_heads
         self.hidden_units=hidden_units
         self.num_classes=num_classes
+        self.N_q=N_q
 
         self.build_module()
     def build_module(self):
@@ -455,11 +492,23 @@ class Quite_Big_Model(nn.Module):
 
         #Transformer Layer - I'm not sure if the d_model is meant to be the same as our d_model, but it doesn't work if I try that
         ##self.layer_dict["Transformer"]=nn.Transformer(d_model=self.d_model,nhead=self.num_heads,batch_first=True)
+        '''
         self.layer_dict["Transformer"]=nn.Transformer(d_model=out.shape[-1],nhead=self.num_heads,batch_first=True)
 
         out=self.layer_dict["Transformer"].forward(out,out)
+        '''
+        out = out.permute(0, 2, 1)  # (batch_size, 17, d_model)
+
+        self.layer_dict["Transformer"]=ECGTransformer(d_model=out.shape[-1],num_heads=self.num_heads,num_queries=out.shape[1],num_encoder_layers=4,num_decoder_layers=4)
+
+        out=self.layer_dict["Transformer"].forward(out)
 
         print("Transformer Output Shape: ",out.shape)
+
+        #Conv for N_q shape
+        self.layer_dict["Conv1d_N_q"]=nn.Conv1d(out.shape[1], self.N_q, kernel_size=1, padding=0)
+
+        out=self.layer_dict["Conv1d_N_q"].forward(out)
 
         #Final module
         self.layer_dict["FullyConnected"]=MultipleOutputFFN(out.shape,self.hidden_units,self.num_classes)
@@ -473,11 +522,14 @@ class Quite_Big_Model(nn.Module):
         #    #Just check we are giving the right input into the model
         #    raise ValueError(f"Error: Input supplied ({Input.shape}) is not the same size as intialised ({self.input_shape})")
         out=self.layer_dict["Cnn_Backbone"].forward(Input)
-        out=self.layer_dict["Transformer"].forward(out,out)#Not sure if this is the right way to forward pass the transformer
+        out=out.permute(0,2,1)
+        out=self.layer_dict["Transformer"].forward(out)#Not sure if this is the right way to forward pass the transformer
+        out=self.layer_dict["Conv1d_N_q"].forward(out)
         out=self.layer_dict["FullyConnected"].forward(out)
 
         return out
     def reset_parameters(self):
         self.layer_dict["Cnn_Backbone"].reset_parameters()
         #self.layer_dict["Transformer"].reset_parameters()
+        self.layer_dict["Conv1d_N_q"].reset_parameters()
         self.layer_dict["FullyConnected"].reset_parameters()
