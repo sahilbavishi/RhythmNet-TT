@@ -23,6 +23,10 @@ Yvals=np.array(ecg_data.iloc[:,labelcol:].values) #All the labels
 
 def One_Hot(Input):
     """Function to one-hot encode a 1xn numpy array, returns an nx4 encoded variable"""
+    np.putmask(Input,(Input=="L")+(Input=="R")+(Input=="j")+(Input=="e"),"N")#Replace the multiple labels that mean `N` with N
+    np.putmask(Input,(Input=="A")+(Input=="a")+(Input=="S")+(Input=="J"),"S")#Replace the multiple labels that mean `S` with S
+    np.putmask(Input,(Input=="!")+(Input=="V")+(Input=="E")+(Input=="[")+(Input=="]"),"V")#Replace the multiple labels that mean `V` with V
+    np.putmask(Input,(Input!="N")+(Input!="S")+(Input!="V")+(Input!="F"),0)#Replace the multiple labels that should be unclassified with 0
     Classes=np.array(["N","S","V","F",0])[:,np.newaxis] #N,S,V,F and empty classes
     return Classes.T==Input[:,np.newaxis]
 
