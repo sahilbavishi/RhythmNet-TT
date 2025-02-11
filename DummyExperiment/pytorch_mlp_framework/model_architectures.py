@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.ops import SqueezeExcitation
+import math
 
 
 class FullyConnectedNetwork(nn.Module):
@@ -411,15 +412,64 @@ class cnnBackbone(nn.Module):
         for layerkey in self.layer_dict.keys():
             self.layer_dict[layerkey].reset_parameters()
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        """
+        Initialize the PositionalEncoding module.
+
+        Args:
+            d_model: The number of expected features in the input.
+            max_len: The maximum length of the input sequence.
+        """
+        super(PositionalEncoding, self).__init__()
+        self.d_model = d_model
+        
+        # Create a matrix to hold the positional encodings
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        
+        # Apply sine to even indices and cosine to odd indices
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        
+        # Add a batch dimension for easier integration
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        Add positional encoding to the input.
+        Args:
+            x: Tensor of shape [seq_len, batch_size, d_model].
+        Returns:
+            Tensor with positional encodings added to the input.
+        """
+        x = x + self.pe[:x.size(0), :]
+        return x
+
+    def reset_parameters(self):
+        """
+        Resets the parameters (if any learnable parameters are added in future versions).
+        """
+        self.pe.zero_()
+
+
 # Transformer adapted for our task
 class ECGTransformer(nn.Module):
-    def __init__(self, d_model, num_heads, num_queries, num_encoder_layers, num_decoder_layers):
+    def __init__(self, d_model, num_heads, num_queries, num_encoder_layers, num_decoder_layers, max_seq_len=5000):
         super(ECGTransformer, self).__init__()
         
         self.d_model = d_model
         self.num_heads = num_heads
         self.num_queries = num_queries
+        self.num_encoder_layers = num_encoder_layers
+        self.num_decoder_layers = num_decoder_layers
+        self.max_seq_len = max_seq_len
         
+        # Positional Encoding
+        self.positional_encoding = PositionalEncoding(d_model=d_model, max_len=max_seq_len)
+
         # Transformer components
         self.encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads, batch_first=True)
         self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_encoder_layers)
@@ -435,6 +485,10 @@ class ECGTransformer(nn.Module):
         :param features: Extracted features from ECG signals (batch_size, seq_len, d_model)
         :return: Predicted classes and positions of heartbeats
         """
+        # Add positional encoding
+        features = self.positional_encoding(features)  # Shape: (batch_size, seq_len, d_model)
+
+
         # Encoder
         encoded_features = self.encoder(features)  # Shape: (batch_size, seq_len, d_model)
         
