@@ -180,7 +180,7 @@ class ExperimentBuilder(nn.Module):
         #Three loss functions - two for position, one for class but the second position loss in the actual loss calc
         self.classifier_criterion = FocalLoss(Theta=1,Gamma=2).to(self.device) #Thetas may need to be tuned for what we want
         self.position_criterion1 = nn.L1Loss().to(self.device)
-        self.position_criterion2 = GboxIoULoss(maxtimeframe=1080).to(self.device)
+        self.position_criterion2 = GboxIoULoss(device=self.device,maxtimeframe=1080).to(self.device)
         self.WindowMaker = CreateHeartbeatWindow(maxtimeframe=1080,sigma=0.4,device=self.device).to(self.device)
 
         if continue_from_epoch >= 0:
