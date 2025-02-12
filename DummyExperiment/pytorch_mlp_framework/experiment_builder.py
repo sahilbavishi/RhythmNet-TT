@@ -37,7 +37,7 @@ class FocalLoss(nn.Module):
         RealVals: One-hot encodings of the correct classes
         """
         #First, we are going to get the correct classes from the realvals
-        real_classes=torch.argmax(RealVals,dim=2)
+        real_classes=torch.argmax(RealVals,dim=-1)
         #Get the probabilities predicted of the targets
         Ps=torch.gather(Preds,dim=2,index=torch.unsqueeze(real_classes,2))
         #Calc loss:
@@ -45,25 +45,30 @@ class FocalLoss(nn.Module):
 
         return torch.sum(Loss) #Return the sum of the losses
 
-def CreateHeartbeatWindow(InputPositions,maxtimeframe,sigma):
-    """
-    Function to return the window of the heartbeat
+class CreateHeartbeatWindow(nn.Module):
+    def __init__(self, maxtimeframe,sigma):
+        super(CreateHeartbeatWindow,self).__init__()
+        self.maxtimeframe=maxtimeframe
+        self.sigma=sigma
+    def __call__(self, InputPositions):
+        """
+        Function to return the window of the heartbeat
 
-    InputPositons size: [Batchsize, NumberofClassifications, 1] (The positions are at the end)
-    """
-    #To do this, I am first going to change any 0s to above the maximum length, as they are at the end
-    InputPositions[InputPositions==0]=maxtimeframe*2
-    #Append one more as well
-    InputPositions=torch.cat((torch.unsqueeze(InputPositions,2),maxtimeframe*2*torch.ones([InputPositions.shape[0],1,1])),dim=1)
-    #Now get the start positions and the end positions of the windows:
-    StartEnd=InputPositions[:,:-1,:]*sigma+(1-sigma)*InputPositions[:,1:,:]
-    #Append a 0 to the start
-    StartEnd=torch.cat((torch.zeros([StartEnd.shape[0],1,1]),StartEnd),dim=1)
-    #Make sure we are not giving too wide a window
-    StartEnd[StartEnd>maxtimeframe]=maxtimeframe
-    #Return the start and end position by concating them on the 2nd dimension
-    StartEnd=torch.cat((StartEnd[:,:-1,:],StartEnd[:,1:,:]),dim=2)
-    return StartEnd
+        InputPositons size: [Batchsize, NumberofClassifications, 1] (The positions are at the end)
+        """
+        #To do this, I am first going to change any 0s to above the maximum length, as they are at the end
+        InputPositions[InputPositions==0]=self.maxtimeframe*2
+        #Append one more as well
+        InputPositions=torch.cat((torch.unsqueeze(InputPositions,2),self.maxtimeframe*2*torch.ones([InputPositions.shape[0],1,1])),dim=1)
+        #Now get the start positions and the end positions of the windows:
+        StartEnd=InputPositions[:,:-1,:]*self.sigma+(1-self.sigma)*InputPositions[:,1:,:]
+        #Append a 0 to the start
+        StartEnd=torch.cat((torch.zeros([StartEnd.shape[0],1,1]),StartEnd),dim=1)
+        #Make sure we are not giving too wide a window
+        StartEnd[StartEnd>self.maxtimeframe]=self.maxtimeframe
+        #Return the start and end position by concating them on the 2nd dimension
+        StartEnd=torch.cat((StartEnd[:,:-1,:],StartEnd[:,1:,:]),dim=2)
+        return StartEnd
 
 
 class GboxIoULoss(nn.Module):
@@ -174,6 +179,7 @@ class ExperimentBuilder(nn.Module):
         self.classifier_criterion = FocalLoss(Theta=1,Gamma=2).to(self.device) #Thetas may need to be tuned for what we want
         self.position_criterion1 = nn.L1Loss().to(self.device)
         self.position_criterion2 = GboxIoULoss(maxtimeframe=1080).to(self.device)
+        self.WindowMaker = CreateHeartbeatWindow(maxtimeframe=1080,sigma=0.4).to(self.device)
 
         if continue_from_epoch >= 0:
             self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_model(
@@ -197,7 +203,8 @@ class ExperimentBuilder(nn.Module):
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
         output[:,:,-1][predicted_classes==5]=0 #Set positions to 0 when the model has predicted the null class
         
-        TargetWindows=CreateHeartbeatWindow(y[:,:,-1].type(torch.float32),maxtimeframe=1080,sigma=0.4)#Create window of heartbeat
+        TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32))#Create window of heartbeat
+        
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
         PosLoss=self.position_criterion1(predicted_positions, TargetWindows)+self.position_criterion2(predicted_positions,TargetWindows)
@@ -224,7 +231,7 @@ class ExperimentBuilder(nn.Module):
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
         output[:,:,-1][predicted_classes==5]=0 #Set positions to 0 when the model has predicted the null class
         
-        TargetWindows=CreateHeartbeatWindow(y[:,:,-1].type(torch.float32),maxtimeframe=1080,sigma=0.4)#Create window of heartbeat
+        TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32))#Create window of heartbeat
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
         PosLoss=self.position_criterion1(predicted_positions, TargetWindows)+self.position_criterion2(predicted_positions,TargetWindows)

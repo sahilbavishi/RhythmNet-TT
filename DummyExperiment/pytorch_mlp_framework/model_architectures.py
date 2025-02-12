@@ -124,14 +124,14 @@ class MultipleOutputFFN(nn.Module):
         self.layer_dict["Classification"]=FeedForwardModule(self.input_dim,self.hidden_units,self.output_dim)
         out2=self.layer_dict["Classification"].forward(x)
         print("output2 shape: ",out2.shape)
-        outfinal=torch.cat([out1,out2],dim=2)
+        outfinal=torch.cat([out2,out1],dim=2)
         print("output final shape: ",outfinal.shape)
         return outfinal
     def forward(self,input):
         x=input
         out1=self.layer_dict["Locations"].forward(x)
         out2=self.layer_dict["Classification"].forward(x)
-        outfinal=torch.cat([out1,out2],dim=2)
+        outfinal=torch.cat([out2,out1],dim=2)
         return outfinal
     def reset_parameters(self):
         """
