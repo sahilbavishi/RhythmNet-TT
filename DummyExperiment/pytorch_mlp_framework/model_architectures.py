@@ -68,7 +68,7 @@ class FeedForwardModule(nn.Module):
         self.layer_dict["bn0"]=nn.BatchNorm1d(x.shape[1])
         x=self.layer_dict["bn0"].forward(x)
         print("shape after batch normalisation layer: ", x.shape)
-        output_num=1
+        output_num=2 #2 if we are classifying positions
         if self.finallayer=="softmax":
             #Change final layer size to number of classes, if this is a classification task
             output_num=self.num_classes
