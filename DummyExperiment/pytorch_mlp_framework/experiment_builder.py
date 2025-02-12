@@ -171,9 +171,9 @@ class ExperimentBuilder(nn.Module):
 
         self.num_epochs = num_epochs
         #Three loss functions - two for position, one for class but the second position loss in the actual loss calc
-        self.classifier_criterion = FocalLoss(Theta=1,Gamma=2) #Thetas may need to be tuned for what we want
+        self.classifier_criterion = FocalLoss(Theta=1,Gamma=2).to(self.device) #Thetas may need to be tuned for what we want
         self.position_criterion1 = nn.L1Loss().to(self.device)
-        self.position_criterion2 = GboxIoULoss(maxtimeframe=1080)
+        self.position_criterion2 = GboxIoULoss(maxtimeframe=1080).to(self.device)
 
         if continue_from_epoch >= 0:
             self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_model(
@@ -229,7 +229,7 @@ class ExperimentBuilder(nn.Module):
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
         PosLoss=self.position_criterion1(predicted_positions, TargetWindows)+self.position_criterion2(predicted_positions,TargetWindows)
         loss = ClassLoss+PosLoss
-        
+
         #Accuracy is just the class accuracy at the moment - nothing to do with the position
         accuracy = (predicted_classes==real_classes).float().mean().item()
         return loss.item(), accuracy
