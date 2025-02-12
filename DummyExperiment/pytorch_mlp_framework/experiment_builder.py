@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import torchvision.ops as ops
 import tqdm
 import os
 import numpy as np
@@ -9,6 +10,44 @@ import time
 from storage_utils import save_statistics
 from matplotlib import pyplot as plt
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
+
+class FocalLoss(nn.Module):
+    """
+    A class for calulcating the focal loss for the loss function
+    """
+    def __init__(self, Theta,Gamma):
+        """
+        Initialise the focal loss class
+        Inputs
+        ------
+        Theta: The theta parameter
+        Gamma: The gamma parameter
+        """
+        super(FocalLoss,self).__init__()
+        self.theta=Theta
+        self.gamma=Gamma
+    def __call__(self,Preds,RealVals):
+        """
+        Inputs
+        ------
+        Preds: The predicted probabilities of the classes
+        RealVals: One-hot encodings of the correct classes
+        """
+        #First, we are going to get the correct classes from the realvals
+        real_classes=torch.argmax(RealVals)
+        #Get the probabilities predicted of the targets
+        Ps=torch.gather(Preds,dim=2,index=real_classes)
+        #Calc loss:
+        Loss=-self.theta*(1-Ps)**2*torch.log(Ps)
+
+        return Loss
+
+
+
+        
+
+
+
 
 class ExperimentBuilder(nn.Module):
     def __init__(self, network_model, experiment_name, num_epochs, train_data, val_data,
@@ -61,9 +100,9 @@ class ExperimentBuilder(nn.Module):
             os.makedirs(self.experiment_saved_models)
 
         self.num_epochs = num_epochs
-        #Two loss functions - one for position, one for class
-        self.classifier_criterion = nn.CrossEntropyLoss().to(self.device)
-        self.position_criterion=nn.CrossEntropyLoss().to(self.device)
+        #Three loss functions - two for position, one for class but the second position loss in the actual loss calc
+        self.classifier_criterion = FocalLoss(Theta=1,Gamma=2) #Thetas may need to be tuned for what we want
+        self.position_criterion1 = nn.L1Loss().to(self.device)
 
         if continue_from_epoch >= 0:
             self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_model(
@@ -78,7 +117,7 @@ class ExperimentBuilder(nn.Module):
         self.train()
         x, y = x.float().to(self.device), y.long().to(self.device)
         output = self.model(x)
-        loss = self.classifier_criterion(output[:,:,:-1], y[:,:,:-1].type(torch.float32))+self.position_criterion(output[:,:,-1], y[:,:,-1].type(torch.float32)) #convert to float32 to do the measuring
+        loss = self.classifier_criterion(output[:,:,:-1], y[:,:,:-1].type(torch.float32))+self.position_criterion1(output[:,:,-1], y[:,:,-1].type(torch.float32))+ops.generalized_box_iou_loss(output[:,:,-1], y[:,:,-1].type(torch.float32)) #convert to float32 to do the measuring
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
