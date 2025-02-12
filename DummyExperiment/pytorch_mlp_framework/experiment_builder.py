@@ -46,10 +46,11 @@ class FocalLoss(nn.Module):
         return torch.sum(Loss) #Return the sum of the losses
 
 class CreateHeartbeatWindow(nn.Module):
-    def __init__(self, maxtimeframe,sigma):
+    def __init__(self, maxtimeframe,sigma,device):
         super(CreateHeartbeatWindow,self).__init__()
         self.maxtimeframe=maxtimeframe
         self.sigma=sigma
+        self.device=device
     def __call__(self, InputPositions):
         """
         Function to return the window of the heartbeat
@@ -59,7 +60,7 @@ class CreateHeartbeatWindow(nn.Module):
         #To do this, I am first going to change any 0s to above the maximum length, as they are at the end
         InputPositions[InputPositions==0]=self.maxtimeframe*2
         #Append one more as well
-        InputPositions=torch.cat((torch.unsqueeze(InputPositions,2),self.maxtimeframe*2*torch.ones([InputPositions.shape[0],1,1])),dim=1)
+        InputPositions=torch.cat((torch.unsqueeze(InputPositions,2),self.maxtimeframe*2*torch.ones([InputPositions.shape[0],1,1]).to(self.device)),dim=1)
         #Now get the start positions and the end positions of the windows:
         StartEnd=InputPositions[:,:-1,:]*self.sigma+(1-self.sigma)*InputPositions[:,1:,:]
         #Append a 0 to the start
@@ -179,7 +180,7 @@ class ExperimentBuilder(nn.Module):
         self.classifier_criterion = FocalLoss(Theta=1,Gamma=2).to(self.device) #Thetas may need to be tuned for what we want
         self.position_criterion1 = nn.L1Loss().to(self.device)
         self.position_criterion2 = GboxIoULoss(maxtimeframe=1080).to(self.device)
-        self.WindowMaker = CreateHeartbeatWindow(maxtimeframe=1080,sigma=0.4).to(self.device)
+        self.WindowMaker = CreateHeartbeatWindow(maxtimeframe=1080,sigma=0.4,device=self.device).to(self.device)
 
         if continue_from_epoch >= 0:
             self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_model(
