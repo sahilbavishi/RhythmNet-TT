@@ -10,6 +10,42 @@ import time
 from storage_utils import save_statistics
 from matplotlib import pyplot as plt
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
+from collections import defaultdict #For tracking TP,FP,TN
+
+def get_TP_TN_FP_FN(predicted_indices, target_indices, num_classes):
+    # Convert indices to one-hot encoding
+    predicted_onehot = np.eye(num_classes)[predicted_indices.astype(int)]
+    target_onehot = np.eye(num_classes)[target_indices.astype(int)]
+    predicted = predicted_onehot.reshape(-1, num_classes)
+    target = target_onehot.reshape(-1, num_classes)
+    
+    TP, TN, FP, FN = np.zeros(num_classes), np.zeros(num_classes), np.zeros(num_classes), np.zeros(num_classes)
+
+    for i in range(num_classes):
+        TP[i] = np.sum((predicted[:, i] == 1) & (target[:, i] == 1))
+        TN[i] = np.sum((predicted[:, i] == 0) & (target[:, i] == 0))
+        FP[i] = np.sum((predicted[:, i] == 1) & (target[:, i] == 0))
+        FN[i] = np.sum((predicted[:, i] == 0) & (target[:, i] == 1))
+    return TP, TN, FP, FN
+
+def get_metrics(TP, TN, FP, FN):
+    # Calculate the metrics for each class and overall (Macro-averaging and Micro-averaging)
+    accuracy_single = (TP + TN) / (TP + TN + FP + FN)
+    accuracy_micro_avg = (np.sum(TP) + np.sum(TN)) / (np.sum(TP) + np.sum(TN) + np.sum(FP) + np.sum(FN))
+    accuracy_macro_avg = np.mean(accuracy_single)
+    accuracy = {'single_accuracy': accuracy_single, 'micro_avg_accuracy': accuracy_micro_avg, 'macro_avg_accuracy': accuracy_macro_avg}
+    precision_single = TP / (TP + FP)
+    precision_macro_avg = np.mean(precision_single)
+    precision = {'single_precision': precision_single, 'macro_avg_precision': precision_macro_avg}
+    recall_single = TP / (TP + FN)
+    recall_macro_avg = np.mean(recall_single)
+    recall = {'single_recall': recall_single, 'macro_avg_recall': recall_macro_avg}
+    f1_single = 2 * (precision_single * recall_single) / (precision_single + recall_single)
+    f1_macro_avg = np.mean(f1_single)
+    f1 = {'single_f1': f1_single, 'macro_avg_f1': f1_macro_avg}
+    return accuracy, precision, recall, f1
+
+            
 
 class FocalLoss(nn.Module):
     """
@@ -117,15 +153,6 @@ class GboxIoULoss(nn.Module):
         return torch.sum(Loss) #Return the sum of all the losses 
 
 
-        
-
-
-        
-        
-
-
-
-
 class ExperimentBuilder(nn.Module):
     def __init__(self, network_model, experiment_name, num_epochs, train_data, val_data,
                  test_data, weight_decay_coefficient, use_gpu, continue_from_epoch=-1):
@@ -172,6 +199,12 @@ class ExperimentBuilder(nn.Module):
         self.best_val_model_idx = 0
         self.best_val_model_acc = 0.0
 
+        # track TP, TN, FP, FN for each class, class size is 
+        self.TP = None
+        self.TN = None
+        self.FP = None
+        self.FN = None
+
         if not os.path.exists(self.experiment_folder):
             os.makedirs(self.experiment_logs)
             os.makedirs(self.experiment_saved_models)
@@ -197,15 +230,14 @@ class ExperimentBuilder(nn.Module):
         x, y = x.float().to(self.device), y.long().to(self.device)
         output = self.model(x)
         #Get predicted and real classes
-        predicted_classes=torch.argmax(output[:,:,:-2],dim=-1)
-        real_classes=torch.argmax(y[:,:,:-1],dim=-1)
+        predicted_classes=torch.argmax(output[:,:,:-2],dim=-1) # [batch, num_pred]
+        real_classes=torch.argmax(y[:,:,:-1],dim=-1) # [batch, num_gt]
         
-        predicted_positions=torch.sort(output[:,:,-2:],dim=2)[0] #Sort the predicted boxes
+        predicted_positions=torch.sort(output[:,:,-2:],dim=2)[0] #Sort the predicted boxes, [batch, num_pred, 2]
+        TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32)) #window of heartbeat, [batch, num_gt, 2]
 
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
         output[:,:,-1][predicted_classes==5]=0 #Set positions to 0 when the model has predicted the null class
-        
-        TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32))#Create window of heartbeat
         
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
@@ -216,32 +248,37 @@ class ExperimentBuilder(nn.Module):
         self.optimizer.step()
         self.learning_rate_scheduler.step()
 
-        #Accuracy is just the class accuracy at the moment - nothing to do with the position
-        accuracy = (predicted_classes==real_classes).float().mean().item()
-        return loss.item(), accuracy
+        #Metrics calculations, just for class at the moment - nothing to do with the position
+        TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes.cpu().numpy(), real_classes.cpu().numpy(), num_classes=5)
+        accuracy, precision, recall, f1 = get_metrics(TP, TN, FP, FN)
+    
+        return loss.item(), accuracy, precision, recall, f1
 
     def run_evaluation_iter(self, x, y):
         self.eval()
         x, y = x.float().to(self.device), y.long().to(self.device)
         output = self.model(x)
-        #Get predicted and real classes
-        predicted_classes=torch.argmax(output[:,:,:-2],dim=-1)
-        real_classes=torch.argmax(y[:,:,:-1],dim=-1)
+
+        # Get predictions and ground truths
+        predicted_classes=torch.argmax(output[:,:,:-2],dim=-1) # [batch, num_pred]
+        real_classes=torch.argmax(y[:,:,:-1],dim=-1) # [batch, num_gt]
         
-        predicted_positions=torch.sort(output[:,:,-2:],dim=2)[0] #Sort the predicted boxes
+        predicted_positions=torch.sort(output[:,:,-2:],dim=2)[0] #Sort the predicted boxes, [batch, num_pred, 2]
+        TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32)) # window of heartbeat, [batch, num_gt, 2]
 
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
         output[:,:,-1][predicted_classes==5]=0 #Set positions to 0 when the model has predicted the null class
-        
-        TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32))#Create window of heartbeat
+
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
         PosLoss=self.position_criterion1(predicted_positions, TargetWindows)+self.position_criterion2(predicted_positions,TargetWindows)
         loss = ClassLoss+PosLoss
-
-        #Accuracy is just the class accuracy at the moment - nothing to do with the position
-        accuracy = (predicted_classes==real_classes).float().mean().item()
-        return loss.item(), accuracy
+        
+        #Metrics calculations, just for class at the moment - nothing to do with the position
+        TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes.cpu().numpy(), real_classes.cpu().numpy(), num_classes=5)
+        accuracy, precision, recall, f1 = get_metrics(TP, TN, FP, FN)
+    
+        return loss.item(), accuracy, precision, recall, f1
 
     def save_model(self, model_dir, model_name, epoch, best_val_model_idx, best_val_model_acc):
         self.state['network'] = self.model.state_dict()
@@ -261,28 +298,36 @@ class ExperimentBuilder(nn.Module):
         return state, state['best_val_model_idx'], state['best_val_model_acc']
 
     def run_experiment(self):
-        total_losses = {"train_acc": [], "train_loss": [], "val_acc": [], "val_loss": []}
+        total_losses = {"train_acc": [], "train_loss": [], "train_precision": [], "train_recall": [], "train_f1": [],
+                        "val_acc": [], "val_loss": [], "val_precision": [], "val_recall": [], "val_f1": []}
 
         for epoch in range(self.starting_epoch, self.num_epochs):
             epoch_start_time = time.time()
-            current_epoch_losses = {"train_acc": [], "train_loss": [], "val_acc": [], "val_loss": []}
+            current_epoch_losses = {"train_acc": [], "train_loss": [], "train_precision": [], "train_recall": [], "train_f1": [],
+                                    "val_acc": [], "val_loss": [], "val_precision": [], "val_recall": [], "val_f1": []}
 
             self.train()
             with tqdm.tqdm(total=len(self.train_data)) as pbar:
                 for x, y in self.train_data:
-                    loss, acc = self.run_train_iter(x, y)
+                    loss, acc, prec, rec, f1 = self.run_train_iter(x, y)
                     current_epoch_losses['train_loss'].append(loss)
-                    current_epoch_losses['train_acc'].append(acc)
+                    current_epoch_losses['train_acc'].append(acc['micro_avg_accuracy'])
+                    current_epoch_losses['train_precision'].append(prec['macro_avg_precision'])
+                    current_epoch_losses['train_recall'].append(rec['macro_avg_recall'])
+                    current_epoch_losses['train_f1'].append(f1['macro_avg_f1'])
                     pbar.update(1)
-                    pbar.set_description(f"Epoch {epoch} - Loss: {loss:.4f}, Acc: {acc:.4f}")
+                    pbar.set_description(f"Epoch {epoch} - Loss: {loss:.4f}, Acc: {acc['micro_avg_accuracy']:.4f}")
 
             self.eval()
             with torch.no_grad():
                 with tqdm.tqdm(total=len(self.val_data)) as pbar:
                     for x, y in self.val_data:
-                        loss, acc = self.run_evaluation_iter(x, y)
+                        loss, acc, prec, rec, f1 = self.run_evaluation_iter(x, y)
                         current_epoch_losses['val_loss'].append(loss)
-                        current_epoch_losses['val_acc'].append(acc)
+                        current_epoch_losses['val_acc'].append(acc['micro_avg_accuracy'])
+                        current_epoch_losses['val_precision'].append(prec['macro_avg_precision'])
+                        current_epoch_losses['val_recall'].append(rec['macro_avg_recall'])
+                        current_epoch_losses['val_f1'].append(f1['macro_avg_f1'])
                         pbar.update(1)
 
             val_mean_acc = np.mean(current_epoch_losses['val_acc'])
@@ -301,14 +346,16 @@ class ExperimentBuilder(nn.Module):
         print("Evaluating on test set...")
         self.load_model(self.experiment_saved_models, "train_model", self.best_val_model_idx)
 
-        test_losses = {"test_acc": [], "test_loss": []}
-        with torch.no_grad():
-            with tqdm.tqdm(total=len(self.test_data)) as pbar:
-                for x, y in self.test_data:
-                    loss, acc = self.run_evaluation_iter(x, y)
-                    test_losses['test_loss'].append(loss)
-                    test_losses['test_acc'].append(acc)
-                    pbar.update(1)
+        test_losses = {"test_acc": [], "test_loss": [], "test_precision": [], "test_recall": [], "test_f1": []}
+        with tqdm.tqdm(total=len(self.test_data)) as pbar:
+            for x, y in self.test_data:
+                loss, acc, prec, rec, f1 = self.run_evaluation_iter(x, y)
+                test_losses['test_loss'].append(loss)
+                test_losses['test_acc'].append(acc['micro_avg_accuracy'])
+                test_losses['test_precision'].append(prec['macro_avg_precision'])
+                test_losses['test_recall'].append(rec['macro_avg_recall'])
+                test_losses['test_f1'].append(f1['macro_avg_f1'])
+                pbar.update(1)
 
         save_statistics(self.experiment_logs, 'test_summary.csv', test_losses, 0, continue_from_mode=False)
         return total_losses, test_losses
