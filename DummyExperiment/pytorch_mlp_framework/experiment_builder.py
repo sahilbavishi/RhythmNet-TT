@@ -32,16 +32,16 @@ def get_metrics(TP, TN, FP, FN):
     # Calculate the metrics for each class and overall (Macro-averaging and Micro-averaging)
     accuracy_single = (TP + TN) / (TP + TN + FP + FN)
     accuracy_micro_avg = (np.sum(TP) + np.sum(TN)) / (np.sum(TP) + np.sum(TN) + np.sum(FP) + np.sum(FN))
-    accuracy_macro_avg = np.mean(accuracy_single)
+    accuracy_macro_avg = np.nanmean(accuracy_single)
     accuracy = {'single_accuracy': accuracy_single, 'micro_avg_accuracy': accuracy_micro_avg, 'macro_avg_accuracy': accuracy_macro_avg}
     precision_single = TP / (TP + FP)
-    precision_macro_avg = np.mean(precision_single)
+    precision_macro_avg = np.nanmean(precision_single)
     precision = {'single_precision': precision_single, 'macro_avg_precision': precision_macro_avg}
     recall_single = TP / (TP + FN)
-    recall_macro_avg = np.mean(recall_single)
+    recall_macro_avg = np.nanmean(recall_single)
     recall = {'single_recall': recall_single, 'macro_avg_recall': recall_macro_avg}
     f1_single = 2 * (precision_single * recall_single) / (precision_single + recall_single)
-    f1_macro_avg = np.mean(f1_single)
+    f1_macro_avg = np.nanmean(f1_single)
     f1 = {'single_f1': f1_single, 'macro_avg_f1': f1_macro_avg}
     return accuracy, precision, recall, f1
 
@@ -315,6 +315,7 @@ class ExperimentBuilder(nn.Module):
                     current_epoch_losses['train_precision'].append(prec['macro_avg_precision'])
                     current_epoch_losses['train_recall'].append(rec['macro_avg_recall'])
                     current_epoch_losses['train_f1'].append(f1['macro_avg_f1'])
+
                     pbar.update(1)
                     pbar.set_description(f"Epoch {epoch} - Loss: {loss:.4f}, Acc: {acc['micro_avg_accuracy']:.4f}")
 
