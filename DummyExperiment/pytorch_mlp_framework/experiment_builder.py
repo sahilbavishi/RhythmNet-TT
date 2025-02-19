@@ -197,6 +197,8 @@ class ExperimentBuilder(nn.Module):
         predicted_positions=torch.sort(output[:,:,-2:],dim=2)[0] #Sort the predicted boxes, [batch, num_pred, 2]
         TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32)) #window of heartbeat, [batch, num_gt, 2]
 
+        #print("predicted_positions", predicted_positions[0,:,:])
+        #print("TargetWindows", TargetWindows[0,:,:])
 
 
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
@@ -211,16 +213,14 @@ class ExperimentBuilder(nn.Module):
         self.optimizer.step()
         self.learning_rate_scheduler.step()
 
-        #Metrics calculations, just for class at the moment - nothing to do with the position
+        #Metrics calculations
         TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes.cpu().numpy(), real_classes.cpu().numpy(), num_classes=5)
         accuracy, precision, recall, f1 = get_metrics(TP, TN, FP, FN)
 
-        #TP, FP, FN = get_windows_TP_FP_FN(predicted_positions.detach().cpu().numpy(), TargetWindows.detach().cpu().numpy())
-        #bbox_metrics = get_windows_metrics(TP, FP, FN)
-
-        print("bbox_metrics", bbox_metrics)
+        TP, FP, FN = get_windows_TP_FP_FN(predicted_positions.detach().cpu().numpy(), TargetWindows.detach().cpu().numpy(), predicted_classes.cpu().numpy(), real_classes.cpu().numpy())
+        precision_window, recall_window, f1_window = get_windows_metrics(TP, FP, FN)
     
-        return loss.item(), accuracy, precision, recall, f1
+        return loss.item(), accuracy, precision, recall, f1, precision_window, recall_window, f1_window
 
     def run_evaluation_iter(self, x, y):
         self.eval()
@@ -235,7 +235,7 @@ class ExperimentBuilder(nn.Module):
         TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32)) # window of heartbeat, [batch, num_gt, 2]
 
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
-        output[:,:,-1][predicted_classes==5]=0 #Set positions to 0 when the model has predicted the null class
+        output[:,:,-1][predicted_classes==4]=0 #Set positions to 0 when the model has predicted the null class
 
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
@@ -245,8 +245,11 @@ class ExperimentBuilder(nn.Module):
         #Metrics calculations, just for class at the moment - nothing to do with the position
         TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes.cpu().numpy(), real_classes.cpu().numpy(), num_classes=5)
         accuracy, precision, recall, f1 = get_metrics(TP, TN, FP, FN)
+
+        TP, FP, FN = get_windows_TP_FP_FN(predicted_positions.detach().cpu().numpy(), TargetWindows.detach().cpu().numpy(), predicted_classes.cpu().numpy(), real_classes.cpu().numpy())
+        precision_window, recall_window, f1_window = get_windows_metrics(TP, FP, FN)
     
-        return loss.item(), accuracy, precision, recall, f1
+        return loss.item(), accuracy, precision, recall, f1, precision_window, recall_window, f1_window
 
     def save_model(self, model_dir, model_name, epoch, best_val_model_idx, best_val_model_acc):
         self.state['network'] = self.model.state_dict()
@@ -267,36 +270,48 @@ class ExperimentBuilder(nn.Module):
 
     def run_experiment(self):
         total_losses = {"train_acc": [], "train_loss": [], "train_precision": [], "train_recall": [], "train_f1": [],
-                        "val_acc": [], "val_loss": [], "val_precision": [], "val_recall": [], "val_f1": []}
+                        "train_precision_window": [], "train_recall_window": [], "train_f1_window": [],
+                        "val_acc": [], "val_loss": [], "val_precision": [], "val_recall": [], "val_f1": [],
+                        "val_precision_window": [], "val_recall_window": [], "val_f1_window": []}
 
         for epoch in range(self.starting_epoch, self.num_epochs):
             epoch_start_time = time.time()
             current_epoch_losses = {"train_acc": [], "train_loss": [], "train_precision": [], "train_recall": [], "train_f1": [],
-                                    "val_acc": [], "val_loss": [], "val_precision": [], "val_recall": [], "val_f1": []}
+                                    "train_precision_window": [], "train_recall_window": [], "train_f1_window": [],
+                                    "val_acc": [], "val_loss": [], "val_precision": [], "val_recall": [], "val_f1": [],
+                                    "val_precision_window": [], "val_recall_window": [], "val_f1_window": []}
 
             self.train()
             with tqdm.tqdm(total=len(self.train_data)) as pbar:
                 for x, y in self.train_data:
-                    loss, acc, prec, rec, f1 = self.run_train_iter(x, y)
+                    loss, acc, prec, rec, f1, prec_window, rec_window, f1_window = self.run_train_iter(x, y)
                     current_epoch_losses['train_loss'].append(loss)
                     current_epoch_losses['train_acc'].append(acc['micro_avg_accuracy'])
                     current_epoch_losses['train_precision'].append(prec['macro_avg_precision'])
                     current_epoch_losses['train_recall'].append(rec['macro_avg_recall'])
                     current_epoch_losses['train_f1'].append(f1['macro_avg_f1'])
+                    current_epoch_losses['train_precision_window'].append(prec_window)
+                    current_epoch_losses['train_recall_window'].append(rec_window)
+                    current_epoch_losses['train_f1_window'].append(f1_window)
+                    
 
                     pbar.update(1)
-                    pbar.set_description(f"Epoch {epoch} - Loss: {loss:.4f}, Acc: {acc['micro_avg_accuracy']:.4f}")
+                    pbar.set_description(f"Epoch {epoch} - Loss: {loss:.4f}, Acc: {acc['micro_avg_accuracy']:.4f}, F1: {f1['macro_avg_f1']:.4f}")
 
             self.eval()
             with torch.no_grad():
                 with tqdm.tqdm(total=len(self.val_data)) as pbar:
                     for x, y in self.val_data:
-                        loss, acc, prec, rec, f1 = self.run_evaluation_iter(x, y)
+                        loss, acc, prec, rec, f1, prec_window, rec_window, f1_window = self.run_evaluation_iter(x, y)
                         current_epoch_losses['val_loss'].append(loss)
                         current_epoch_losses['val_acc'].append(acc['micro_avg_accuracy'])
                         current_epoch_losses['val_precision'].append(prec['macro_avg_precision'])
                         current_epoch_losses['val_recall'].append(rec['macro_avg_recall'])
                         current_epoch_losses['val_f1'].append(f1['macro_avg_f1'])
+                        current_epoch_losses['val_precision_window'].append(prec_window)
+                        current_epoch_losses['val_recall_window'].append(rec_window)
+                        current_epoch_losses['val_f1_window'].append(f1_window)
+
                         pbar.update(1)
 
             val_mean_acc = np.mean(current_epoch_losses['val_acc'])
@@ -315,15 +330,19 @@ class ExperimentBuilder(nn.Module):
         print("Evaluating on test set...")
         self.load_model(self.experiment_saved_models, "train_model", self.best_val_model_idx)
 
-        test_losses = {"test_acc": [], "test_loss": [], "test_precision": [], "test_recall": [], "test_f1": []}
+        test_losses = {"test_acc": [], "test_loss": [], "test_precision": [], "test_recall": [], "test_f1": [],
+                       "test_precision_window": [], "test_recall_window": [], "test_f1_window": []}
         with tqdm.tqdm(total=len(self.test_data)) as pbar:
             for x, y in self.test_data:
-                loss, acc, prec, rec, f1 = self.run_evaluation_iter(x, y)
+                loss, acc, prec, rec, f1, 
                 test_losses['test_loss'].append(loss)
                 test_losses['test_acc'].append(acc['micro_avg_accuracy'])
                 test_losses['test_precision'].append(prec['macro_avg_precision'])
                 test_losses['test_recall'].append(rec['macro_avg_recall'])
                 test_losses['test_f1'].append(f1['macro_avg_f1'])
+                test_losses['test_precision_window'].append(prec_window)
+                test_losses['test_recall_window'].append(rec_window)
+                test_losses['test_f1_window'].append(f1_window)
                 pbar.update(1)
 
         save_statistics(self.experiment_logs, 'test_summary.csv', test_losses, 0, continue_from_mode=False)

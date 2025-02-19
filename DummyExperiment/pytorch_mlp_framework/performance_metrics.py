@@ -46,7 +46,7 @@ def get_metrics(TP, TN, FP, FN):
 
 
 
-########## bounding box metrics ##########ù
+########## bounding box metrics ##########
 def get_iou_1d(interval1, interval2):
     start1, end1 = interval1
     start2, end2 = interval2
@@ -61,38 +61,51 @@ def get_iou_1d(interval1, interval2):
 
     return inter_length / total_length if total_length > 0 else 0
 
-import numpy as np
+def get_windows_TP_FP_FN(predicted_intervals, target_intervals, predicted_classes, real_classes, iou_threshold=0.5):
+    predicted_intervals = predicted_intervals.reshape(-1, 2)
+    target_intervals = target_intervals.reshape(-1, 2)
+    predicted_classes = predicted_classes.reshape(-1)
+    real_classes = real_classes.reshape(-1)
 
-def get_windows_TP_FP_FN(predicted_intervals, target_intervals, iou_threshold=0.5):
+    # Filter out predicted intervals with class 4 (no-obj)
+    predicted_mask = predicted_classes != 4
+    predicted_intervals = predicted_intervals[predicted_mask]
+    predicted_classes = predicted_classes[predicted_mask]
+
+    # Filter out target intervals with class 4 (not annotated)
+    target_mask = real_classes != 4
+    target_intervals = target_intervals[target_mask]
+    real_classes = real_classes[target_mask]
+
     TP, FP, FN = 0, 0, 0
 
+    # Handle edge cases
     if len(predicted_intervals) == 0:
         FN = len(target_intervals)
         return TP, FP, FN
-    
     if len(target_intervals) == 0:
         FP = len(predicted_intervals)
         return TP, FP, FN
-    
-    iou_matrix = np.zeros((len(target_intervals), len(predicted_intervals)))
 
-    # Compute IoU for each pair
+    # Compute IoU matrix
+    iou_matrix = np.zeros((len(target_intervals), len(predicted_intervals)))
     for i, target_interval in enumerate(target_intervals):
         for j, predicted_interval in enumerate(predicted_intervals):
             iou_matrix[i, j] = get_iou_1d(target_interval, predicted_interval)
 
-    # Find the best IoU for each target interval
-    max_iou = np.max(iou_matrix, axis=1)
-    
-    # Count TP, FP, FN
-    TP = np.sum(max_iou >= iou_threshold)
-    FP = len(predicted_intervals) - TP
+    # Calculate TP: number of targets with at least one prediction >= iou_threshold
+    TP = np.sum(np.max(iou_matrix, axis=1) >= iou_threshold)
+
+    # Calculate FP: predictions with all IoU < threshold
+    FP = np.sum(np.max(iou_matrix, axis=0) < iou_threshold)
+
+    # Calculate FN: targets not matched by any prediction
     FN = len(target_intervals) - TP
 
     return TP, FP, FN
 
 def get_windows_metrics(TP, FP, FN):
-    # Calculate the metrics for each class and overall
-    precision = TP / (TP + FP) if TP + FP > 0 else 0
-    recall = TP / (TP + FN) if TP + FN > 0 else 0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    return precision, recall, f1
