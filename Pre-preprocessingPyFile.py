@@ -22,11 +22,14 @@ TimeFrame=Seconds*360
 
 def ConvertAnnos(Anno,Intervals):
     """Takes annotation data and returns a labels within the intervals"""
-    ReturnAnnotations=np.ndarray.flatten(Anno[Anno[:,1]<=TimeFrame])
+    ReturnAnnotations=Anno[Anno[:,1]<=TimeFrame]
+    ReturnAnnotations=ReturnAnnotations[ReturnAnnotations[:,0]!="+"] #Remove the classes with "+"
+    ReturnAnnotations=np.ndarray.flatten(ReturnAnnotations)
     ReturnAnnotations=[np.pad(ReturnAnnotations,pad_width=(0,MaxNumBeats-len(ReturnAnnotations)))]
     for j,i in enumerate(Intervals[:-1]):
         AddArray=Anno[(Anno[:,1]<=Intervals[j+1])*(Anno[:,1]>=i)] #Get array of annotations and positions
         AddArray[:,1]=AddArray[:,1]-i #Adjust the position values so they are relative to the window
+        AddArray=AddArray[AddArray[:,0]!="+"] #Remove the + values from the data
         AddArray=np.ndarray.flatten(AddArray) #Flatten array to append
         ReturnAnnotations=np.append(ReturnAnnotations,[np.pad(AddArray,pad_width=(0,MaxNumBeats-len(AddArray)))],axis=0) #Append the array
     return ReturnAnnotations
