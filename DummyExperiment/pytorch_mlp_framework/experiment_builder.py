@@ -11,50 +11,7 @@ from storage_utils import save_statistics
 from matplotlib import pyplot as plt
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
 from collections import defaultdict #For tracking TP,FP,TN
-
-def get_TP_TN_FP_FN(predicted_indices, target_indices, num_classes):
-    # Convert indices to one-hot encoding
-    predicted_onehot = np.eye(num_classes)[predicted_indices.astype(int)]
-    target_onehot = np.eye(num_classes)[target_indices.astype(int)]
-    predicted = predicted_onehot.reshape(-1, num_classes)
-    target = target_onehot.reshape(-1, num_classes)
-    
-    TP, TN, FP, FN = np.zeros(num_classes), np.zeros(num_classes), np.zeros(num_classes), np.zeros(num_classes)
-
-    for i in range(num_classes):
-        TP[i] = np.sum((predicted[:, i] == 1) & (target[:, i] == 1))
-        TN[i] = np.sum((predicted[:, i] == 0) & (target[:, i] == 0))
-        FP[i] = np.sum((predicted[:, i] == 1) & (target[:, i] == 0))
-        FN[i] = np.sum((predicted[:, i] == 0) & (target[:, i] == 1))
-    return TP, TN, FP, FN
-
-def get_metrics(TP, TN, FP, FN):
-    # Calculate the metrics for each class and overall (Macro-averaging and Micro-averaging)
-    accuracy_single = (TP + TN) / (TP + TN + FP + FN)
-    accuracy_micro_avg = (np.sum(TP) + np.sum(TN)) / (np.sum(TP) + np.sum(TN) + np.sum(FP) + np.sum(FN))
-    accuracy_macro_avg = np.nanmean(accuracy_single)
-    accuracy = {'single_accuracy': accuracy_single, 'micro_avg_accuracy': accuracy_micro_avg, 'macro_avg_accuracy': accuracy_macro_avg}
-    
-    # Calculate precision with division handling
-    with np.errstate(divide='ignore', invalid='ignore'):
-        precision_single = TP / (TP + FP)
-    precision_macro_avg = np.nanmean(precision_single)
-    precision = {'single_precision': precision_single, 'macro_avg_precision': precision_macro_avg}
-    
-    # Calculate recall with division handling
-    with np.errstate(divide='ignore', invalid='ignore'):
-        recall_single = TP / (TP + FN)
-    recall_macro_avg = np.nanmean(recall_single)
-    recall = {'single_recall': recall_single, 'macro_avg_recall': recall_macro_avg}
-    
-    # Calculate F1 score with division handling
-    with np.errstate(divide='ignore', invalid='ignore'):
-        f1_single = (2 * precision_single * recall_single) / (precision_single + recall_single)
-    f1_macro_avg = np.nanmean(f1_single)
-    f1 = {'single_f1': f1_single, 'macro_avg_f1': f1_macro_avg}
-    
-    return accuracy, precision, recall, f1
-
+from performance_metrics import get_TP_TN_FP_FN, get_metrics, get_windows_TP_FP_FN, get_windows_metrics
             
 
 class FocalLoss(nn.Module):
@@ -240,6 +197,8 @@ class ExperimentBuilder(nn.Module):
         predicted_positions=torch.sort(output[:,:,-2:],dim=2)[0] #Sort the predicted boxes, [batch, num_pred, 2]
         TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32)) #window of heartbeat, [batch, num_gt, 2]
 
+
+
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
         output[:,:,-1][predicted_classes==5]=0 #Set positions to 0 when the model has predicted the null class
         
@@ -255,6 +214,11 @@ class ExperimentBuilder(nn.Module):
         #Metrics calculations, just for class at the moment - nothing to do with the position
         TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes.cpu().numpy(), real_classes.cpu().numpy(), num_classes=5)
         accuracy, precision, recall, f1 = get_metrics(TP, TN, FP, FN)
+
+        #TP, FP, FN = get_windows_TP_FP_FN(predicted_positions.detach().cpu().numpy(), TargetWindows.detach().cpu().numpy())
+        #bbox_metrics = get_windows_metrics(TP, FP, FN)
+
+        print("bbox_metrics", bbox_metrics)
     
         return loss.item(), accuracy, precision, recall, f1
 
