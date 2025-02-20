@@ -34,7 +34,7 @@ class NeuralMemory(nn.Module):
         out = self.layer_dict["Input_Layer"].forward(x)
         out = F.relu(self.layer_dict["bn0"].forward(out))
         out = self.layer_dict["Output_Layer"].forward(out)
-        return torch.cat((out, x), dim=1)
+        return out
     
     def forward_inferenece(self, input):
         '''
@@ -216,7 +216,8 @@ class Titan(nn.Module):
         self.layer_dict=nn.ModuleDict()
         print(f"Input shape before neural memory: {out.shape}")
         self.layer_dict['Neural_Memory'] = NeuralMemory(input_shape = self.input_shape, hidden_units = self.hidden_units)
-        out = self.layer_dict['Neural_Memory'].forward(out)
+        out1 = self.layer_dict['Neural_Memory'].forward(out)
+        out = torch.cat((out1, out), dim=1)
         print(f"Output shape after neural memory: {out.shape}")
         self.layer_dict['Attention'] = Attention(input_shape = out.shape, d_model = self.d_model, transformer_heads = self.transformer_heads, N_q = self.N_q)
         out = self.layer_dict['Attention'].forward(out)
@@ -224,7 +225,8 @@ class Titan(nn.Module):
         return out
 
     def forward(self, input):
-        out = self.layer_dict['Neural_Memory'].forward(out)
+        out1 = self.layer_dict['Neural_Memory'].forward(input)
+        out = torch.cat((out1, input), 1)
         out = self.layer_dict['Attention'].forward(out)
         '''
         Gotta add the inference part here and then do the dot product. I do not know how to do this.

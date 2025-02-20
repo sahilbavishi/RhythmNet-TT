@@ -570,6 +570,7 @@ class Quite_Big_Model(nn.Module):
         out=self.layer_dict["FullyConnected"].forward(out)
 
         print("Final Ouput Shape: ",out.shape)
+        
     def forward(self,Input):
         Input=Input.unsqueeze(1) #Need to add this as the data loader does not add the channel term
         #if Input.shape!=torch.zeros(self.input_shape).shape:
