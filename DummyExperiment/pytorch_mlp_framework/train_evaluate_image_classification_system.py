@@ -40,10 +40,10 @@ def ConvertClassandPos(Yinput):
 
     Returns
     -------
-    An array of size [n,1,5] - one hot encoded with position at end (the 5)
+    An array of size [n,1,6] - one hot encoded with position at end (the 6)
     """
     Onehotted=One_Hot(Yinput[:,0])
-    Yret=np.append(Onehotted,Yinput[:,1][:,np.newaxis],axis=1)
+    Yret=np.append(Onehotted,Yinput[:,1][:,np.newaxis]/labelcol,axis=1) #divide by labelcol, to make the positions range from 0 to 1
     return Yret[:,np.newaxis,:]
 
 Y=ConvertClassandPos(Yvals[:,:2]) #Convert classification
@@ -66,6 +66,7 @@ X = scaler.fit_transform(X)"""
 # Split data into train, validation, and test sets
 X_train, X_temp, y_train, y_temp = train_test_split(X, Y, test_size=0.3, random_state=args.seed)
 X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=args.seed)
+
 
 # Ensure that the numpy arrays are of type float32 for X and float32 for y
 X_train = np.array(X_train, dtype=np.float32)

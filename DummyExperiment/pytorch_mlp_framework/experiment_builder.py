@@ -174,8 +174,8 @@ class ExperimentBuilder(nn.Module):
         #Three loss functions - two for position, one for class but the second position loss in the actual loss calc
         self.classifier_criterion = FocalLoss(Theta=1,Gamma=2).to(self.device) #Thetas may need to be tuned for what we want
         self.position_criterion1 = nn.L1Loss().to(self.device)
-        self.position_criterion2 = GboxIoULoss(device=self.device,maxtimeframe=1080).to(self.device)
-        self.WindowMaker = CreateHeartbeatWindow(maxtimeframe=1080,sigma=0.4,device=self.device).to(self.device)
+        self.position_criterion2 = GboxIoULoss(device=self.device,maxtimeframe=1).to(self.device)
+        self.WindowMaker = CreateHeartbeatWindow(maxtimeframe=1,sigma=0.4,device=self.device).to(self.device)
 
         if continue_from_epoch >= 0:
             self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_model(
@@ -188,7 +188,7 @@ class ExperimentBuilder(nn.Module):
 
     def run_train_iter(self, x, y):
         self.train()
-        x, y = x.float().to(self.device), y.long().to(self.device)
+        x, y = x.float().to(self.device), y.float().to(self.device)
         output = self.model(x)
         #Get predicted and real classes
         predicted_classes=torch.argmax(output[:,:,:-2],dim=-1) # [batch, num_pred]
@@ -202,7 +202,7 @@ class ExperimentBuilder(nn.Module):
 
 
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
-        output[:,:,-1][predicted_classes==5]=0 #Set positions to 0 when the model has predicted the null class
+        output[:,:,-1][predicted_classes==4]=1 #Set positions to max when the model has predicted the null class
         
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
@@ -214,17 +214,17 @@ class ExperimentBuilder(nn.Module):
         self.learning_rate_scheduler.step()
 
         #Metrics calculations
-        TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes.cpu().numpy(), real_classes.cpu().numpy(), num_classes=5)
+        TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes, real_classes, num_classes=5,device=self.device)
         accuracy, precision, recall, f1 = get_metrics(TP, TN, FP, FN)
 
-        TP, FP, FN = get_windows_TP_FP_FN(predicted_positions.detach().cpu().numpy(), TargetWindows.detach().cpu().numpy(), predicted_classes.cpu().numpy(), real_classes.cpu().numpy())
+        TP, FP, FN = get_windows_TP_FP_FN(predicted_positions.detach(), TargetWindows.detach(), predicted_classes, real_classes,device=self.device)
         precision_window, recall_window, f1_window = get_windows_metrics(TP, FP, FN)
     
         return loss.item(), accuracy, precision, recall, f1, precision_window, recall_window, f1_window
 
     def run_evaluation_iter(self, x, y):
         self.eval()
-        x, y = x.float().to(self.device), y.long().to(self.device)
+        x, y = x.float().to(self.device), y.float().to(self.device)
         output = self.model(x)
 
         # Get predictions and ground truths
@@ -235,7 +235,7 @@ class ExperimentBuilder(nn.Module):
         TargetWindows=self.WindowMaker(y[:,:,-1].type(torch.float32)) # window of heartbeat, [batch, num_gt, 2]
 
         #Change the output of the positions to make sure that the model does not need to worry about positions when it has classified a null beat
-        output[:,:,-1][predicted_classes==4]=0 #Set positions to 0 when the model has predicted the null class
+        output[:,:,-1][predicted_classes==4]=1 #Set positions to max when the model has predicted the null class
 
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
@@ -243,11 +243,14 @@ class ExperimentBuilder(nn.Module):
         loss = ClassLoss+PosLoss
         
         #Metrics calculations, just for class at the moment - nothing to do with the position
-        TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes.cpu().numpy(), real_classes.cpu().numpy(), num_classes=5)
+        TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes, real_classes, num_classes=5,device=self.device)
         accuracy, precision, recall, f1 = get_metrics(TP, TN, FP, FN)
 
-        TP, FP, FN = get_windows_TP_FP_FN(predicted_positions.detach().cpu().numpy(), TargetWindows.detach().cpu().numpy(), predicted_classes.cpu().numpy(), real_classes.cpu().numpy())
+        TP, FP, FN = get_windows_TP_FP_FN(predicted_positions.detach(), TargetWindows.detach(), predicted_classes, real_classes,device=self.device)
         precision_window, recall_window, f1_window = get_windows_metrics(TP, FP, FN)
+
+        #print("predicted_positions", predicted_positions[0,:,:])
+        #print("TargetWindows", TargetWindows[0,:,:])
     
         return loss.item(), accuracy, precision, recall, f1, precision_window, recall_window, f1_window
 
@@ -314,13 +317,13 @@ class ExperimentBuilder(nn.Module):
 
                         pbar.update(1)
 
-            val_mean_acc = np.mean(current_epoch_losses['val_acc'])
+            val_mean_acc = torch.mean(torch.tensor(current_epoch_losses['val_acc']))
             if val_mean_acc > self.best_val_model_acc:
                 self.best_val_model_acc = val_mean_acc
                 self.best_val_model_idx = epoch
 
             for key in current_epoch_losses:
-                total_losses[key].append(np.mean(current_epoch_losses[key]))
+                total_losses[key].append(torch.mean(torch.tensor(current_epoch_losses[key])))
 
             save_statistics(self.experiment_logs, 'summary.csv', total_losses, epoch, continue_from_mode=(epoch > 0))
 

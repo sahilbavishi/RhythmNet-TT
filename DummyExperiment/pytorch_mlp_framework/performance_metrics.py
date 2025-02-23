@@ -1,45 +1,50 @@
-import numpy as np
+import torch
+import warnings
 
 ########## classification metrics ##########
-def get_TP_TN_FP_FN(predicted_indices, target_indices, num_classes):
+def get_TP_TN_FP_FN(predicted_indices, target_indices, num_classes,device):
+    #torch.set_default_device(device) #Send all tensors to the correct device
     # Convert indices to one-hot encoding
-    predicted_onehot = np.eye(num_classes)[predicted_indices.astype(int)]
-    target_onehot = np.eye(num_classes)[target_indices.astype(int)]
+    predicted_onehot = torch.eye(num_classes,device=device)[predicted_indices.type(torch.int)]
+    target_onehot = torch.eye(num_classes,device=device)[target_indices.type(torch.int)]
     predicted = predicted_onehot.reshape(-1, num_classes)
     target = target_onehot.reshape(-1, num_classes)
     
-    TP, TN, FP, FN = np.zeros(num_classes), np.zeros(num_classes), np.zeros(num_classes), np.zeros(num_classes)
+    TP, TN, FP, FN = torch.zeros(num_classes,device=device), torch.zeros(num_classes,device=device), torch.zeros(num_classes,device=device), torch.zeros(num_classes,device=device)
 
     for i in range(num_classes):
-        TP[i] = np.sum((predicted[:, i] == 1) & (target[:, i] == 1))
-        TN[i] = np.sum((predicted[:, i] == 0) & (target[:, i] == 0))
-        FP[i] = np.sum((predicted[:, i] == 1) & (target[:, i] == 0))
-        FN[i] = np.sum((predicted[:, i] == 0) & (target[:, i] == 1))
+        TP[i] = torch.sum((predicted[:, i] == 1) & (target[:, i] == 1))
+        TN[i] = torch.sum((predicted[:, i] == 0) & (target[:, i] == 0))
+        FP[i] = torch.sum((predicted[:, i] == 1) & (target[:, i] == 0))
+        FN[i] = torch.sum((predicted[:, i] == 0) & (target[:, i] == 1))
     return TP, TN, FP, FN
 
 def get_metrics(TP, TN, FP, FN):
     # Calculate the metrics for each class and overall (Macro-averaging and Micro-averaging)
     accuracy_single = (TP + TN) / (TP + TN + FP + FN)
-    accuracy_micro_avg = (np.sum(TP) + np.sum(TN)) / (np.sum(TP) + np.sum(TN) + np.sum(FP) + np.sum(FN))
-    accuracy_macro_avg = np.nanmean(accuracy_single)
+    accuracy_micro_avg = (torch.sum(TP) + torch.sum(TN)) / (torch.sum(TP) + torch.sum(TN) + torch.sum(FP) + torch.sum(FN))
+    accuracy_macro_avg = torch.nanmean(accuracy_single)
     accuracy = {'single_accuracy': accuracy_single, 'micro_avg_accuracy': accuracy_micro_avg, 'macro_avg_accuracy': accuracy_macro_avg}
     
     # Calculate precision with division handling
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         precision_single = TP / (TP + FP)
-    precision_macro_avg = np.nanmean(precision_single)
+    precision_macro_avg = torch.nanmean(precision_single)
     precision = {'single_precision': precision_single, 'macro_avg_precision': precision_macro_avg}
     
     # Calculate recall with division handling
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         recall_single = TP / (TP + FN)
-    recall_macro_avg = np.nanmean(recall_single)
+    recall_macro_avg = torch.nanmean(recall_single)
     recall = {'single_recall': recall_single, 'macro_avg_recall': recall_macro_avg}
     
     # Calculate F1 score with division handling
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         f1_single = (2 * precision_single * recall_single) / (precision_single + recall_single)
-    f1_macro_avg = np.nanmean(f1_single)
+    f1_macro_avg = torch.nanmean(f1_single)
     f1 = {'single_f1': f1_single, 'macro_avg_f1': f1_macro_avg}
     
     return accuracy, precision, recall, f1
@@ -54,14 +59,39 @@ def get_iou_1d(interval1, interval2):
     # Compute intersection
     inter_start = max(start1, start2)
     inter_end = min(end1, end2)
-    inter_length = max(0, inter_end - inter_start)  # If negative, no intersection
+    inter_length = max(0 , inter_end - inter_start)  # If negative, no intersection
 
     # Compute union
     total_length = (end1 - start1) + (end2 - start2) - inter_length
 
     return inter_length / total_length if total_length > 0 else 0
 
-def get_windows_TP_FP_FN(predicted_intervals, target_intervals, predicted_classes, real_classes, iou_threshold=0.5):
+
+def get_iou_1d_batch(target_intervals, predicted_intervals):
+
+    # Calculate starts and ends of intervals
+    start1, end1 = target_intervals[:, 0], target_intervals[:, 1]
+    start2, end2 = predicted_intervals[:, 0], predicted_intervals[:, 1]
+
+    # Compute intersection using broadcasting
+    inter_start = torch.max(start1.unsqueeze(1), start2.unsqueeze(0))  # Broadcasting over both sets of intervals
+    inter_end = torch.min(end1.unsqueeze(1), end2.unsqueeze(0))
+
+    # Calculate intersection length (must be non-negative)
+    inter_length = torch.max(inter_end - inter_start, torch.zeros_like(inter_end))
+
+    # Compute union
+    total_length = (end1.unsqueeze(1) - start1.unsqueeze(1)) + (end2.unsqueeze(0) - start2.unsqueeze(0)) - inter_length
+
+    # Compute IoU (avoid division by zero)
+    iou_matrix = torch.where(total_length > 0, inter_length / total_length, torch.zeros_like(inter_length))
+
+    return iou_matrix
+
+
+def get_windows_TP_FP_FN(predicted_intervals, target_intervals, predicted_classes, real_classes,device ,iou_threshold=0.5):
+    
+    iou_threshold=torch.tensor(iou_threshold).to(device) #Send the threshold to the same device
     predicted_intervals = predicted_intervals.reshape(-1, 2)
     target_intervals = target_intervals.reshape(-1, 2)
     predicted_classes = predicted_classes.reshape(-1)
@@ -87,17 +117,20 @@ def get_windows_TP_FP_FN(predicted_intervals, target_intervals, predicted_classe
         FP = len(predicted_intervals)
         return TP, FP, FN
 
-    # Compute IoU matrix
-    iou_matrix = np.zeros((len(target_intervals), len(predicted_intervals)))
+
+    #Compute IoU matrix
+    iou_matrix = get_iou_1d_batch(target_intervals,predicted_intervals)
+    """# Compute IoU matrix
+    iou_matrix = torch.zeros((len(target_intervals), len(predicted_intervals)),device=device)
     for i, target_interval in enumerate(target_intervals):
         for j, predicted_interval in enumerate(predicted_intervals):
-            iou_matrix[i, j] = get_iou_1d(target_interval, predicted_interval)
+            iou_matrix[i, j] = get_iou_1d(target_interval, predicted_interval)"""
 
     # Calculate TP: number of targets with at least one prediction >= iou_threshold
-    TP = np.sum(np.max(iou_matrix, axis=1) >= iou_threshold)
+    TP = torch.sum(torch.max(iou_matrix, axis=1)[0] >= iou_threshold)
 
     # Calculate FP: predictions with all IoU < threshold
-    FP = np.sum(np.max(iou_matrix, axis=0) < iou_threshold)
+    FP = torch.sum(torch.max(iou_matrix, axis=0)[0] < iou_threshold)
 
     # Calculate FN: targets not matched by any prediction
     FN = len(target_intervals) - TP
@@ -109,3 +142,4 @@ def get_windows_metrics(TP, FP, FN):
     recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
     return precision, recall, f1
+

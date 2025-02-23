@@ -1,0 +1,2 @@
+test_acc,test_loss,test_precision,test_recall,test_f1,test_precision_window,test_recall_window,test_f1_window
+"tensor(0.8807, device='cuda:0')",118.97700500488281,"tensor(0.7500, device='cuda:0')","tensor(0.3123, device='cuda:0')","tensor(0.7387, device='cuda:0')","tensor(1., device='cuda:0')","tensor(0.7049, device='cuda:0')","tensor(0.8269, device='cuda:0')"
