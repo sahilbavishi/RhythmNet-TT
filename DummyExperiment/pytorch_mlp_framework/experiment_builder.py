@@ -311,19 +311,19 @@ class ExperimentBuilder(nn.Module):
                         current_epoch_losses['val_precision'].append(prec['macro_avg_precision'])
                         current_epoch_losses['val_recall'].append(rec['macro_avg_recall'])
                         current_epoch_losses['val_f1'].append(f1['macro_avg_f1'])
-                        current_epoch_losses['val_precision_window'].append(prec_window)
-                        current_epoch_losses['val_recall_window'].append(rec_window)
-                        current_epoch_losses['val_f1_window'].append(f1_window)
+                        current_epoch_losses['val_precision_window'].append(prec_window.cpu())
+                        current_epoch_losses['val_recall_window'].append(rec_window.cpu())
+                        current_epoch_losses['val_f1_window'].append(f1_window.cpu())
 
                         pbar.update(1)
 
-            val_mean_acc = torch.mean(torch.tensor(current_epoch_losses['val_acc']))
+            val_mean_acc = np.mean(current_epoch_losses['val_acc'])
             if val_mean_acc > self.best_val_model_acc:
                 self.best_val_model_acc = val_mean_acc
                 self.best_val_model_idx = epoch
 
             for key in current_epoch_losses:
-                total_losses[key].append(torch.mean(torch.tensor(current_epoch_losses[key])))
+                total_losses[key].append(np.mean(current_epoch_losses[key]))
 
             save_statistics(self.experiment_logs, 'summary.csv', total_losses, epoch, continue_from_mode=(epoch > 0))
 

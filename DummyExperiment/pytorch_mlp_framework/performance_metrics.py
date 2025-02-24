@@ -24,28 +24,28 @@ def get_metrics(TP, TN, FP, FN):
     accuracy_single = (TP + TN) / (TP + TN + FP + FN)
     accuracy_micro_avg = (torch.sum(TP) + torch.sum(TN)) / (torch.sum(TP) + torch.sum(TN) + torch.sum(FP) + torch.sum(FN))
     accuracy_macro_avg = torch.nanmean(accuracy_single)
-    accuracy = {'single_accuracy': accuracy_single, 'micro_avg_accuracy': accuracy_micro_avg, 'macro_avg_accuracy': accuracy_macro_avg}
+    accuracy = {'single_accuracy': accuracy_single.cpu(), 'micro_avg_accuracy': accuracy_micro_avg.cpu(), 'macro_avg_accuracy': accuracy_macro_avg.cpu()}
     
     # Calculate precision with division handling
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         precision_single = TP / (TP + FP)
     precision_macro_avg = torch.nanmean(precision_single)
-    precision = {'single_precision': precision_single, 'macro_avg_precision': precision_macro_avg}
+    precision = {'single_precision': precision_single.cpu(), 'macro_avg_precision': precision_macro_avg.cpu()}
     
     # Calculate recall with division handling
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         recall_single = TP / (TP + FN)
     recall_macro_avg = torch.nanmean(recall_single)
-    recall = {'single_recall': recall_single, 'macro_avg_recall': recall_macro_avg}
+    recall = {'single_recall': recall_single.cpu(), 'macro_avg_recall': recall_macro_avg.cpu()}
     
     # Calculate F1 score with division handling
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         f1_single = (2 * precision_single * recall_single) / (precision_single + recall_single)
     f1_macro_avg = torch.nanmean(f1_single)
-    f1 = {'single_f1': f1_single, 'macro_avg_f1': f1_macro_avg}
+    f1 = {'single_f1': f1_single.cpu(), 'macro_avg_f1': f1_macro_avg.cpu()}
     
     return accuracy, precision, recall, f1
 
@@ -141,5 +141,5 @@ def get_windows_metrics(TP, FP, FN):
     precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
     recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-    return precision, recall, f1
+    return precision.cpu(), recall.cpu(), f1.cpu()
 
