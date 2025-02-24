@@ -161,7 +161,7 @@ class ExperimentBuilder(nn.Module):
 
     def load_model(self, model_dir, model_name, epoch):
         model_path = os.path.join(model_dir, f"{model_name}_{epoch}.pth")
-        state = torch.load(model_path)
+        state = torch.load(model_path,weights_only=False)
         self.model.load_state_dict(state['network'])
         self.optimizer.load_state_dict(state['optimizer'])
         return state, state['best_val_model_idx'], state['best_val_model_acc']
