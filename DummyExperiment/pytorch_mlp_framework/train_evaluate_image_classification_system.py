@@ -84,7 +84,11 @@ val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), b
 test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=args.batch_size, shuffle=False)
 # Define the model
 # model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
-model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],d_model=6,transformer_heads=1,hidden_units=12,num_classes=5)
+model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
+                      d_model=6,
+                      transformer_heads=args.transformer_heads,
+                      hidden_units=args.hidden_units,
+                      num_classes=5)
 #model = Quite_Big_Model(input_shape=(args.batch_size, 1, args.num_features), hidden_units=64, output_classes=args.num_classes)
 
 # Build and run the experiment
@@ -92,6 +96,7 @@ experiment = ExperimentBuilder(network_model=model,
                                 experiment_name=args.experiment_name,
                                 num_epochs=args.num_epochs,
                                 weight_decay_coefficient=args.weight_decay_coefficient,
+                                learning_rate=args.learning_rate,
                                 use_gpu=args.use_gpu,
                                 continue_from_epoch=args.continue_from_epoch,
                                 train_data=train_data,

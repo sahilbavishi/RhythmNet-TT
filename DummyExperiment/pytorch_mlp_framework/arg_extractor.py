@@ -31,6 +31,8 @@ def get_args():
     parser.add_argument('--experiment_name', nargs="?", type=str, default="ecg_experiment",
                         help='Name of the experiment (used for folder creation)')
     parser.add_argument('--use_gpu', nargs="?", type=str2bool, default=True, help='Flag to use GPU if available')
+    parser.add_argument('--transformer_heads', nargs="?", type=int, default=1, help='Number of transformer heads')
+    parser.add_argument('--hidden_units', nargs="?", type=int, default=12, help='Number of hidden units in final layer')
 
     args = parser.parse_args()
     print(args)
