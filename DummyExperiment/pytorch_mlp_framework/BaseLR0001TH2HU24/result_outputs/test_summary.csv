@@ -1,0 +1,2 @@
+test_acc,test_loss,test_precision,test_recall,test_f1,test_precision_window,test_recall_window,test_f1_window
+tensor(0.9719),107.84547424316406,tensor(0.6550),tensor(0.5590),tensor(0.8993),tensor(1.),tensor(1.),tensor(1.)

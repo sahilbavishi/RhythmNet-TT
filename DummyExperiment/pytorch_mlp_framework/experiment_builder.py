@@ -134,8 +134,8 @@ class ExperimentBuilder(nn.Module):
 
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
-        PosLoss=self.position_criterion1(predicted_positions, TargetWindows)+self.position_criterion2(predicted_positions,TargetWindows)
-        loss = ClassLoss+PosLoss
+        PosLoss=4*self.position_criterion1(predicted_positions, TargetWindows)+self.position_criterion2(predicted_positions,TargetWindows)
+        loss = 8*ClassLoss+PosLoss
         
         #Metrics calculations, just for class at the moment - nothing to do with the position
         TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes, real_classes, num_classes=5,device=self.device)
