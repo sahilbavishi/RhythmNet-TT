@@ -1,0 +1,2 @@
+train_acc,train_loss,train_precision,train_recall,train_f1,train_precision_window,train_recall_window,train_f1_window,val_acc,val_loss,val_precision,val_recall,val_f1,val_precision_window,val_recall_window,val_f1_window
+0.9097786,200.03309830269868,0.7757582,0.39457583,nan,0.9029603,0.75748485,0.8170475,0.9174188,177.337479767976,0.81501734,0.3914595,0.80996,1.0,0.77332926,0.8713569
