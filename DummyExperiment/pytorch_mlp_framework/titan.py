@@ -15,19 +15,24 @@ class NeuralMemory(nn.Module):
         self.BuildModule()
 
     def BuildModule(self):
-        x = torch.zeros(self.input_shape)
+        # If input_shape is an int, assume it represents the feature dimension and add a batch dimension of 1.
+        if isinstance(self.input_shape, int):
+            x = torch.zeros(1, self.input_shape)
+        else:
+            x = torch.zeros(self.input_shape)
         print("Building module with input shape ", x.shape)
+
         self.layer_dict=nn.ModuleDict()
         self.layer_dict["Input_Layer"] = nn.Linear(x.shape[-1], self.hidden_units)
         x = self.layer_dict["Input_Layer"].forward(x)
         print("shape after 1st layer: ", x.shape)
         self.layer_dict["bn0"] = nn.BatchNorm1d(x.shape[1])
         x = self.layer_dict["bn0"].forward(x)
-        self.layer_dict["Output_Layer"] = nn.Linear(x.shape[-1], self.input_shape[-1]) # this might give an error because of how python works, any change in x might change input because of python memory storage
-        x = self.layer_dict["Output_Layer"].forward(x)
+
+        out_features = self.input_shape if isinstance(self.input_shape, int) else self.input_shape[-1]
+        self.layer_dict["Output_Layer"] = nn.Linear(x.shape[-1], out_features)
+        x = self.layer_dict["Output_Layer"](x)
         print("shape after final layer: ", x.shape)
-        x = torch.cat((x, torch.zeros(self.input_shape)), dim=1)
-        print("final x shape: ", x.shape)
         return x
     
     def forward(self, x):
@@ -43,23 +48,22 @@ class NeuralMemory(nn.Module):
         return [p for p in self.parameters() if p.requires_grad]
     
     def surprise_score(self, k, v):
-
         prediction = self.forward(k)
         loss = F.mse_loss(prediction, v)
 
         params = self.get_params()
-        surprise_s = torch.autograd.grad(loss, params, create_graph=True)
-
+        surprise_s = torch.autograd.grad(loss, params, create_graph=True, retain_graph=True)
         return surprise_s
 
     def update_memory(self, surprise):
         """
-        Update memory parameters: w -> (1-alpha)w + surprise
+        Update memory parameters: w -> (1-alpha)w + alpha*surprise
+        This is a differentiable version that allows gradients to flow through
         """
-        params = self.get_params()
-        with torch.no_grad():
-            for param, grad in zip(params, surprise):
-                param.mul_(1 - self.alpha).add_(grad)
+        updated_params = {}
+        for (name, param), grad in zip(self.named_parameters(), surprise):
+            updated_params[name] = (1 - self.alpha) * param + self.alpha * grad
+        return updated_params
 
     def forward_inference(self, k, q, v):
         '''
@@ -78,12 +82,17 @@ class NeuralMemory(nn.Module):
         for i, (acc_surp, mom_surp) in enumerate(zip(self.accumulated_surprise, momentary_surprise)):
             self.accumulated_surprise[i] = (self.nu * acc_surp) - (self.theta * mom_surp)
         
-        self.update_memory(self.accumulated_surprise)
+        # Update accumulated surprise element-wise (differentiable)
+        new_accumulated = []
+        for acc, mom in zip(self.accumulated_surprise, momentary_surprise):
+            new_accumulated.append(self.nu * acc - self.theta * mom)
+        self.accumulated_surprise = new_accumulated
 
-        output = self.forward(q)
+        updated_params = self.update_memory(self.accumulated_surprise)
 
+        # compute updated parameters as a function of the current parameters and the computed gradients
+        output = torch.func.functional_call(self, updated_params, q) 
         return output
-
 
     def reset_parameters(self):
         """
@@ -94,6 +103,40 @@ class NeuralMemory(nn.Module):
                 item.reset_parameters()
             except:
                 pass
+
+class TryBackprop(nn.Module):
+    def __init__(self, input_shape, hidden_units):
+        super(TryBackprop,self).__init__()
+        self.input_shape = input_shape
+        self.hidden_units = hidden_units
+        self.BuildModule()
+    
+    def BuildModule(self):
+        # two linear layers with NeuralMemory in the middle, quries, keys and values
+        x = torch.zeros(self.input_shape)
+        self.layer_dict=nn.ModuleDict()
+        self.layer_dict["Queries"] = nn.Linear(x.shape[-1], self.hidden_units)
+        q = self.layer_dict["Queries"].forward(x)
+        self.layer_dict["Keys"] = nn.Linear(x.shape[-1], self.hidden_units)
+        k = self.layer_dict["Keys"].forward(x)
+        self.layer_dict["Values"] = nn.Linear(x.shape[-1], self.hidden_units)
+        v = self.layer_dict["Values"].forward(x)
+
+        self.layer_dict["Neural_Memory"] = NeuralMemory(input_shape=q.shape, hidden_units=self.hidden_units)
+        out = self.layer_dict["Neural_Memory"].forward_inference(k, q, v)
+
+        self.layer_dict["Output_Layer"] = nn.Linear(out.shape[-1], self.input_shape[-1])
+        out = self.layer_dict["Output_Layer"].forward(out)
+        return out
+    
+    def forward(self, x):
+        q = self.layer_dict["Queries"].forward(x)
+        k = self.layer_dict["Keys"].forward(x)
+        v = self.layer_dict["Values"].forward(x)
+        out = self.layer_dict["Neural_Memory"].forward_inference(k, q, v)
+        out = self.layer_dict["Output_Layer"].forward(out)
+        return out
+
 
 '''
 BELOW IS THE ATTENTION MODEL, I AM USING TO THE SAME AS THE PREVIOUS TRANSFORMER.
