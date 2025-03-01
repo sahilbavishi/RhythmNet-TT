@@ -4,10 +4,14 @@ import torch.nn.functional as F
 import math
 
 class NeuralMemory(nn.Module):
-    def __init__(self, input_shape, hidden_units):
+    def __init__(self, input_shape, hidden_units, alpha=0.1, nu = 0.9, theta = 0.3):
         super(NeuralMemory,self).__init__()
         self.input_shape = input_shape
         self.hidden_units = hidden_units
+        self.accumulated_surprise = None
+        self.alpha = alpha # past memory to forget
+        self.nu = nu # surprise decay (how quickly past “surprise” fades)
+        self.theta = theta # momentary surprise scaling
         self.BuildModule()
 
     def BuildModule(self):
@@ -26,25 +30,60 @@ class NeuralMemory(nn.Module):
         print("final x shape: ", x.shape)
         return x
     
-    def forward(self, input):
+    def forward(self, x):
         '''
         Used for concatenation purposes and at the time of predicting post attention
         '''
-        x = input
         out = self.layer_dict["Input_Layer"].forward(x)
         out = F.relu(self.layer_dict["bn0"].forward(out))
         out = self.layer_dict["Output_Layer"].forward(out)
         return out
     
-    def forward_inferenece(self, input):
+    def get_params(self):
+        return [p for p in self.parameters() if p.requires_grad]
+    
+    def surprise_score(self, k, v):
+
+        prediction = self.forward(k)
+        loss = F.mse_loss(prediction, v)
+
+        params = self.get_params()
+        surprise_s = torch.autograd.grad(loss, params, create_graph=True)
+
+        return surprise_s
+
+    def update_memory(self, surprise):
+        """
+        Update memory parameters: w -> (1-alpha)w + surprise
+        """
+        params = self.get_params()
+        with torch.no_grad():
+            for param, grad in zip(params, surprise):
+                param.mul_(1 - self.alpha).add_(grad)
+
+    def forward_inference(self, k, q, v):
         '''
-        Used to train the model with post attention sequence I assume we need to write derivatives here
+        Used to train the model with post attention sequence
+        k: keys (input)
+        q: query
+        v: values (target)
         '''
-        x=input
-        out = self.layer_dict["Input_Layer"].forward(x)
-        out = F.relu(self.layer_dict["bn0"].forward(out))
-        out = self.layer_dict["Output_Layer"].forward(out)
-        return out
+        momentary_surprise = self.surprise_score(k, v)
+
+        # Initialize accumulated_surprise if it's the first call
+        if self.accumulated_surprise is None:
+            self.accumulated_surprise = [torch.zeros_like(grad) for grad in momentary_surprise]
+        
+        # Update accumulated_surprise element-wise
+        for i, (acc_surp, mom_surp) in enumerate(zip(self.accumulated_surprise, momentary_surprise)):
+            self.accumulated_surprise[i] = (self.nu * acc_surp) - (self.theta * mom_surp)
+        
+        self.update_memory(self.accumulated_surprise)
+
+        output = self.forward(q)
+
+        return output
+
 
     def reset_parameters(self):
         """
