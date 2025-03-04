@@ -142,8 +142,8 @@ def get_windows_TP_FP_FN(predicted_intervals, target_intervals, predicted_classe
     return TP, FP, FN
 
 def get_windows_metrics(TP, FP, FN):
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
-    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-    return precision.cpu(), recall.cpu(), f1.cpu()
+    precision = TP / (TP + FP) if (TP + FP) > 0 else torch.tensor(0.0)
+    recall = TP / (TP + FN) if (TP + FN) > 0 else torch.tensor(0.0)
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else torch.tensor(0.0)
+    return precision if type(precision)==float else precision.cpu(), recall if type(recall)==float else recall.cpu(), f1 if type(f1)==float else f1.cpu()
 
