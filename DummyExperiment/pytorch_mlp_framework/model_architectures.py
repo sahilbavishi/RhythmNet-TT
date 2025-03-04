@@ -655,7 +655,9 @@ class Quite_Big_Titan_Model(nn.Module):
         q_first = self.layer_dict["Queries"].forward(out)
         self.layer_dict["Neural_Memory"] = NeuralMemory(input_shape=q_first.shape, hidden_units=self.nm_hu, alpha=self.alpha, nu=self.nu, theta=self.theta)
         out_first_nm = self.layer_dict["Neural_Memory"].forward(q_first)
-
+        
+        #dummy = torch.zeros(1, out.shape[1], out.shape[2])
+        #persistent_memory = nn.Parameter(torch.zeros_like(dummy))
         out = torch.cat((out, out_first_nm), dim=2)
         
         #transformer
@@ -710,6 +712,8 @@ class Quite_Big_Titan_Model(nn.Module):
         q_second = self.layer_dict["Queries"].forward(out)
         v_second = self.layer_dict["Values"].forward(out)
 
+
+        
         out_second_nm = self.layer_dict["Neural_Memory"].forward_inference(k_second, q_second, v_second)
         out_second_nm = self.layer_dict['Linear_trans_shape'].forward(out_second_nm) # back to original shape
 

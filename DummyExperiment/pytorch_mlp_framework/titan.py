@@ -79,19 +79,18 @@ class NeuralMemory(nn.Module):
             self.accumulated_surprise = [torch.zeros_like(grad) for grad in momentary_surprise]
         
         # Update accumulated_surprise element-wise
-        for i, (acc_surp, mom_surp) in enumerate(zip(self.accumulated_surprise, momentary_surprise)):
-            self.accumulated_surprise[i] = (self.nu * acc_surp) - (self.theta * mom_surp)
-        
-        # Update accumulated surprise element-wise (differentiable)
         new_accumulated = []
-        for acc, mom in zip(self.accumulated_surprise, momentary_surprise):
-            new_accumulated.append(self.nu * acc - self.theta * mom)
+        for i, (acc_surp, mom_surp) in enumerate(zip(self.accumulated_surprise, momentary_surprise)):
+            new_acc = self.nu * acc_surp - self.theta * mom_surp
+            new_accumulated.append(new_acc)
         self.accumulated_surprise = new_accumulated
 
         updated_params = self.update_memory(self.accumulated_surprise)
 
-        # compute updated parameters as a function of the current parameters and the computed gradients
-        output = torch.func.functional_call(self, updated_params, q) 
+        # Detach the updated parameters to isolate the inner-loop update from the outer-loop gradients:
+        updated_params_detached = {name: param.detach() for name, param in updated_params.items()}
+
+        output = torch.func.functional_call(self, updated_params_detached, q)
         return output
 
     def reset_parameters(self):
