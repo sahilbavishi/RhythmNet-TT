@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.ops import SqueezeExcitation
 import math
+from titan import NeuralMemory
 
 
 class FullyConnectedNetwork(nn.Module):
@@ -532,6 +533,7 @@ class Quite_Big_Model(nn.Module):
         self.N_q=N_q
 
         self.build_module()
+        
     def build_module(self):
         out=torch.zeros(self.input_shape)
         self.layer_dict=nn.ModuleDict()
@@ -579,6 +581,140 @@ class Quite_Big_Model(nn.Module):
         out=self.layer_dict["Cnn_Backbone"].forward(Input)
         out=out.permute(0,2,1)
         out=self.layer_dict["Transformer"].forward(out)#Not sure if this is the right way to forward pass the transformer
+        out=self.layer_dict["Conv1d_N_q"].forward(out)
+        out=self.layer_dict["FullyConnected"].forward(out)
+
+        return out
+    def reset_parameters(self):
+        self.layer_dict["Cnn_Backbone"].reset_parameters()
+        #self.layer_dict["Transformer"].reset_parameters()
+        self.layer_dict["Conv1d_N_q"].reset_parameters()
+        self.layer_dict["FullyConnected"].reset_parameters()
+
+
+class Quite_Big_Titan_Model(nn.Module):
+    def __init__(self, input_shape ,d_model,transformer_heads,hidden_units,num_classes,N_q=6):
+        """
+        Initializes a quite big model - cnn backbone into transformer into fully connected networks
+        
+        Parameters
+        ----------
+        input_shape
+            Shape of the input
+        d_model
+            Dimension of model hyper-parameter
+        transformer_heads
+            Number of heads in transformer layer - needs to be a factor of d_model
+        hidden_units
+            Number of hidden units in fully connected networks
+        num_classes
+            Number of classes to predict
+        """
+        super(Quite_Big_Titan_Model,self).__init__()
+        self.input_shape=input_shape
+        self.d_model=d_model
+        if d_model/transformer_heads!=d_model//transformer_heads:
+            #If the d_model is not a multiple of transformer heads, return an error and exit
+            raise ValueError("Error: the d_model is not a multiple of the number of transformer heads")
+        self.num_heads=transformer_heads
+        self.hidden_units=hidden_units
+        self.num_classes=num_classes
+        self.N_q=N_q
+
+        #to be made into arg_extractor later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        self.nm_hu = 128
+        self.nm_kqv_size = 64
+        self.alpha = 0.1 # past memory to forget
+        self.nu = 0.9 # surprise decay (how quickly past “surprise” fades)
+        self.theta = 0.3 # momentary surprise scaling
+
+        self.build_module()
+        
+    def build_module(self):
+        out=torch.zeros(self.input_shape)
+        self.layer_dict=nn.ModuleDict()
+        print(f"Initialising Quite A Big Model with input shape {self.input_shape}")
+
+        #CNN Backbone
+        self.layer_dict["Cnn_Backbone"]=cnnBackbone(out.shape,self.d_model)
+
+        out=self.layer_dict["Cnn_Backbone"].forward(out)
+
+        print("Backbone Output Shape: ",out.shape)
+
+        '''
+        self.layer_dict["Transformer"]=nn.Transformer(d_model=out.shape[-1],nhead=self.num_heads,batch_first=True)
+
+        out=self.layer_dict["Transformer"].forward(out,out)
+        '''
+        out = out.permute(0, 2, 1)  # (batch_size, 17, d_model)
+        lin_shape = out.shape[-1]
+
+        #first pass neural memory
+        self.layer_dict["Queries"] = nn.Linear(out.shape[-1], self.nm_kqv_size) # query layer initialized
+        q_first = self.layer_dict["Queries"].forward(out)
+        self.layer_dict["Neural_Memory"] = NeuralMemory(input_shape=q_first.shape, hidden_units=self.nm_hu, alpha=self.alpha, nu=self.nu, theta=self.theta)
+        out_first_nm = self.layer_dict["Neural_Memory"].forward(q_first)
+
+        out = torch.cat((out, out_first_nm), dim=2)
+        
+        #transformer
+        print("Input shape of Transformer: ", out.shape)
+        self.layer_dict["Transformer"]=ECGTransformer(d_model=out.shape[-1],num_heads=self.num_heads,num_queries=out.shape[1],num_encoder_layers=4,num_decoder_layers=4)
+        out=self.layer_dict["Transformer"].forward(out)
+        print("Transformer Output Shape: ",out.shape)
+        self.layer_dict["Linear_reducer"] = nn.Linear(out.shape[-1], lin_shape) # reduction
+        out = self.layer_dict["Linear_reducer"].forward(out)
+
+        #second pass neural memory
+        self.layer_dict["Keys"] = nn.Linear(out.shape[-1], self.nm_kqv_size) # key layer initialized
+        k_second = self.layer_dict["Keys"].forward(out)
+        self.layer_dict["Values"] = nn.Linear(out.shape[-1], self.nm_kqv_size) # value layer initialized
+        q_second = self.layer_dict["Queries"].forward(out)
+        v_second = self.layer_dict["Values"].forward(out)
+        out_second_nm = self.layer_dict["Neural_Memory"].forward_inference(k_second, q_second, v_second)
+
+        # dot product out with out_second_nm
+        self.layer_dict['Linear_trans_shape'] = nn.Linear(self.nm_kqv_size, lin_shape) # back to original shape
+        out_second_nm = self.layer_dict['Linear_trans_shape'].forward(out_second_nm)
+        out = torch.bmm(out, out_second_nm.transpose(2, 1))
+        print("Output shape after dot product: ", out.shape)
+
+        #Conv for N_q shape
+        self.layer_dict["Conv1d_N_q"]=nn.Conv1d(out.shape[1], self.N_q, kernel_size=1, padding=0)
+        out=self.layer_dict["Conv1d_N_q"].forward(out)
+
+        #Final module
+        self.layer_dict["FullyConnected"]=MultipleOutputFFN(out.shape,self.hidden_units,self.num_classes)
+
+        out=self.layer_dict["FullyConnected"].forward(out)
+
+        print("Final Ouput Shape: ",out.shape)
+        
+    def forward(self,Input):
+        Input=Input.unsqueeze(1) #Need to add this as the data loader does not add the channel term
+        #if Input.shape!=torch.zeros(self.input_shape).shape:
+        #    #Just check we are giving the right input into the model
+        #    raise ValueError(f"Error: Input supplied ({Input.shape}) is not the same size as intialised ({self.input_shape})")
+        out=self.layer_dict["Cnn_Backbone"].forward(Input)
+        out=out.permute(0,2,1)
+
+        q_first = self.layer_dict["Queries"].forward(out)
+        out_first_nm = self.layer_dict["Neural_Memory"].forward(q_first)
+        out = torch.cat((out, out_first_nm), dim=2)
+
+        out=self.layer_dict["Transformer"].forward(out) #Not sure if this is the right way to forward pass the transformer
+        out = self.layer_dict["Linear_reducer"].forward(out) # reduction
+        
+        k_second = self.layer_dict["Keys"].forward(out)
+        q_second = self.layer_dict["Queries"].forward(out)
+        v_second = self.layer_dict["Values"].forward(out)
+
+        out_second_nm = self.layer_dict["Neural_Memory"].forward_inference(k_second, q_second, v_second)
+        out_second_nm = self.layer_dict['Linear_trans_shape'].forward(out_second_nm) # back to original shape
+
+        out = torch.bmm(out, out_second_nm.transpose(2, 1))
+
         out=self.layer_dict["Conv1d_N_q"].forward(out)
         out=self.layer_dict["FullyConnected"].forward(out)
 
