@@ -195,6 +195,8 @@ class ExperimentBuilder(nn.Module):
 
                     pbar.update(1)
                     pbar.set_description(f"Epoch {epoch} - Loss: {loss:.4f}, Acc: {acc['micro_avg_accuracy']:.4f}, F1: {f1['macro_avg_f1']:.4f}")
+            if self.device==torch.device('cuda'): #Try to save some memory
+                torch.cuda.empty_cache()
 
             self.eval()
             with torch.no_grad():

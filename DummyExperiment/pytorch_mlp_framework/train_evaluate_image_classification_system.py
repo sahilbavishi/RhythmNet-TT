@@ -84,7 +84,7 @@ val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), b
 test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=args.batch_size, shuffle=False)
 # Define the model
 # model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
-model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,args.num_features],
+model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
                       d_model=6,
                       transformer_heads=args.transformer_heads,
                       hidden_units=args.hidden_units,

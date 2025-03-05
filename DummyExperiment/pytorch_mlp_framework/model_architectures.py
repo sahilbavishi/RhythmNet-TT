@@ -658,8 +658,8 @@ class Quite_Big_Titan_Model(nn.Module):
         out_first_nm = self.layer_dict["Neural_Memory"].forward(q_first)
         
         #persistent memory
-        persistent_memory = nn.Parameter(torch.zeros(1, out.shape[1], self.persistent_dim))
-        persistent_memory_expanded = persistent_memory.expand(out.shape[0], -1, -1) # expand to batch size
+        self.persistent_memory = nn.Parameter(torch.zeros(1, out.shape[1], self.persistent_dim))
+        persistent_memory_expanded = self.persistent_memory.expand(out.shape[0], -1, -1) # expand to batch size
         out = torch.cat((out, out_first_nm, persistent_memory_expanded), dim=2)
         
         #transformer
@@ -694,6 +694,9 @@ class Quite_Big_Titan_Model(nn.Module):
         out=self.layer_dict["FullyConnected"].forward(out)
 
         print("Final Ouput Shape: ",out.shape)
+
+        #Set the accumulated surprise back to None to allow it to initialise again
+        self.layer_dict["Neural_Memory"].accumulated_surprise =None #This is needed so the accumulated surprise is created on the correct device
         
     def forward(self,Input):
         Input=Input.unsqueeze(1) #Need to add this as the data loader does not add the channel term
@@ -705,8 +708,8 @@ class Quite_Big_Titan_Model(nn.Module):
 
         q_first = self.layer_dict["Queries"].forward(out)
         out_first_nm = self.layer_dict["Neural_Memory"].forward(q_first)
-        persistent_memory = nn.Parameter(torch.zeros(1, out.shape[1], self.persistent_dim))
-        persistent_memory_expanded = persistent_memory.expand(out.shape[0], -1, -1) # expand to batch size
+
+        persistent_memory_expanded = self.persistent_memory.expand(out.shape[0], -1, -1) # expand to batch size
         out = torch.cat((out, out_first_nm, persistent_memory_expanded), dim=2)
 
         out=self.layer_dict["Transformer"].forward(out) #Not sure if this is the right way to forward pass the transformer
