@@ -624,6 +624,7 @@ class Quite_Big_Titan_Model(nn.Module):
         #to be made into arg_extractor later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         self.nm_hu = 128
         self.nm_kqv_size = 64
+        self.persistent_dim = 32
         self.alpha = 0.1 # past memory to forget
         self.nu = 0.9 # surprise decay (how quickly past “surprise” fades)
         self.theta = 0.3 # momentary surprise scaling
@@ -656,9 +657,10 @@ class Quite_Big_Titan_Model(nn.Module):
         self.layer_dict["Neural_Memory"] = NeuralMemory(input_shape=q_first.shape, hidden_units=self.nm_hu, alpha=self.alpha, nu=self.nu, theta=self.theta)
         out_first_nm = self.layer_dict["Neural_Memory"].forward(q_first)
         
-        #dummy = torch.zeros(1, out.shape[1], out.shape[2])
-        #persistent_memory = nn.Parameter(torch.zeros_like(dummy))
-        out = torch.cat((out, out_first_nm), dim=2)
+        #persistent memory
+        persistent_memory = nn.Parameter(torch.zeros(1, out.shape[1], self.persistent_dim))
+        persistent_memory_expanded = persistent_memory.expand(out.shape[0], -1, -1) # expand to batch size
+        out = torch.cat((out, out_first_nm, persistent_memory_expanded), dim=2)
         
         #transformer
         print("Input shape of Transformer: ", out.shape)
@@ -703,7 +705,9 @@ class Quite_Big_Titan_Model(nn.Module):
 
         q_first = self.layer_dict["Queries"].forward(out)
         out_first_nm = self.layer_dict["Neural_Memory"].forward(q_first)
-        out = torch.cat((out, out_first_nm), dim=2)
+        persistent_memory = nn.Parameter(torch.zeros(1, out.shape[1], self.persistent_dim))
+        persistent_memory_expanded = persistent_memory.expand(out.shape[0], -1, -1) # expand to batch size
+        out = torch.cat((out, out_first_nm, persistent_memory_expanded), dim=2)
 
         out=self.layer_dict["Transformer"].forward(out) #Not sure if this is the right way to forward pass the transformer
         out = self.layer_dict["Linear_reducer"].forward(out) # reduction
@@ -712,8 +716,6 @@ class Quite_Big_Titan_Model(nn.Module):
         q_second = self.layer_dict["Queries"].forward(out)
         v_second = self.layer_dict["Values"].forward(out)
 
-
-        
         out_second_nm = self.layer_dict["Neural_Memory"].forward_inference(k_second, q_second, v_second)
         out_second_nm = self.layer_dict['Linear_trans_shape'].forward(out_second_nm) # back to original shape
 
