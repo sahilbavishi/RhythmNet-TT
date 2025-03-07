@@ -36,9 +36,6 @@ class NeuralMemory(nn.Module):
         return x
     
     def forward(self, x):
-        '''
-        Used for concatenation purposes and at the time of predicting post attention
-        '''
         out = self.layer_dict["Input_Layer"].forward(x)
         out = F.relu(self.layer_dict["bn0"].forward(out))
         out = self.layer_dict["Output_Layer"].forward(out)
@@ -87,11 +84,38 @@ class NeuralMemory(nn.Module):
 
         updated_params = self.update_memory(self.accumulated_surprise)
 
-        # Detach the updated parameters to isolate the inner-loop update from the outer-loop gradients:
-        updated_params_detached = {name: param.detach() for name, param in updated_params.items()}
+        # differentiable forward pass with updated parameters (Non-persistent updated parameters)
+        output = torch.func.functional_call(self, updated_params, q)
 
-        output = torch.func.functional_call(self, updated_params_detached, q)
+        '''
+        # Persistent updated parameters
+        with torch.no_grad():
+            for name, param in self.named_parameters():
+                param.data.copy_(updated_params[name].data)  # Non-differentiable update (not affecting backpropagation)
+        '''
+        self.updated_params_cache = {name: param.clone().detach() for name, param in updated_params.items()}
+        
         return output
+    
+    def apply_cached_updates(self):
+        """
+        Call this method after backward() has been called on the loss
+        to apply the parameter updates without breaking the graph
+        """
+        if hasattr(self, 'updated_params_cache'):
+            with torch.no_grad():
+                for name, param in self.named_parameters():
+                    if name in self.updated_params_cache:
+                        param.data.copy_(self.updated_params_cache[name].data)
+            # Clear the cache
+            del self.updated_params_cache
+
+    def reset_computational_history(self):
+        # Break the computational graph history
+        if self.accumulated_surprise is not None:
+            self.accumulated_surprise = [
+                s.clone().detach() for s in self.accumulated_surprise
+            ]
 
     def reset_parameters(self):
         """

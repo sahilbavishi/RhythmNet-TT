@@ -23,6 +23,12 @@ class ExperimentBuilder(nn.Module):
         self.experiment_name = experiment_name
         self.model = network_model
 
+        def zero_grad_hook(grad):
+            return torch.zeros_like(grad)
+        # Register hooks on Neural Memory parameters to zero out outer loss gradients.
+        for param in self.model.layer_dict["Neural_Memory"].parameters():
+            param.register_hook(zero_grad_hook)
+
         if torch.cuda.device_count() >= 1 and use_gpu:
             self.device = torch.device('cuda')
             self.model.to(self.device)  # Send the model to the GPU
@@ -40,7 +46,6 @@ class ExperimentBuilder(nn.Module):
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=weight_decay_coefficient)
         self.learning_rate_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_epochs, eta_min=0.00002)
         '''
-        #new learning rate scheduler
         # Define the optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, weight_decay=weight_decay_coefficient)
         
@@ -105,6 +110,8 @@ class ExperimentBuilder(nn.Module):
         loss = ClassLoss+PosLoss
         self.optimizer.zero_grad()
         loss.backward()
+        self.model.layer_dict["Neural_Memory"].apply_cached_updates()
+        self.model.layer_dict["Neural_Memory"].reset_computational_history()
         self.optimizer.step()
         self.learning_rate_scheduler.step()
 
@@ -120,7 +127,10 @@ class ExperimentBuilder(nn.Module):
     def run_evaluation_iter(self, x, y):
         self.eval()
         x, y = x.float().to(self.device), y.float().to(self.device)
-        output = self.model(x)
+        with torch.set_grad_enabled(True):  # Enable gradients for surprise computation
+            output = self.model(x)
+            self.model.layer_dict["Neural_Memory"].apply_cached_updates()
+            self.model.layer_dict["Neural_Memory"].reset_computational_history()
 
         # Get predictions and ground truths
         predicted_classes=torch.argmax(output[:,:,:-2],dim=-1) # [batch, num_pred]
@@ -208,9 +218,9 @@ class ExperimentBuilder(nn.Module):
                         current_epoch_losses['val_precision'].append(prec['macro_avg_precision'])
                         current_epoch_losses['val_recall'].append(rec['macro_avg_recall'])
                         current_epoch_losses['val_f1'].append(f1['macro_avg_f1'])
-                        current_epoch_losses['val_precision_window'].append(prec_window.cpu())
-                        current_epoch_losses['val_recall_window'].append(rec_window.cpu())
-                        current_epoch_losses['val_f1_window'].append(f1_window.cpu())
+                        current_epoch_losses['val_precision_window'].append(prec_window)
+                        current_epoch_losses['val_recall_window'].append(rec_window)
+                        current_epoch_losses['val_f1_window'].append(f1_window)
 
                         pbar.update(1)
 
@@ -234,7 +244,7 @@ class ExperimentBuilder(nn.Module):
                        "test_precision_window": [], "test_recall_window": [], "test_f1_window": []}
         with tqdm.tqdm(total=len(self.test_data)) as pbar:
             for x, y in self.test_data:
-                loss, acc, prec, rec, f1, 
+                loss, acc, prec, rec, f1, prec_window, rec_window, f1_window = self.run_evaluation_iter(x, y)
                 test_losses['test_loss'].append(loss)
                 test_losses['test_acc'].append(acc['micro_avg_accuracy'])
                 test_losses['test_precision'].append(prec['macro_avg_precision'])
