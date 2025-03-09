@@ -323,7 +323,7 @@ class Bottleneck(nn.Module):
 
 
 class cnnBackbone(nn.Module):
-    def __init__(self, input_shape, d_model):
+    def __init__(self, input_shape, d_model,phi=1):
         """
         Initializes a cnn backbone for the feature extraction for the transformer
         
@@ -333,12 +333,15 @@ class cnnBackbone(nn.Module):
             Shape of the input
         d_model
             Size of final channel output (hyper-parameter)
+        phi
+            The phi parameter mentioned in the original paper - to shrink the model size
         """
         super(cnnBackbone, self).__init__()
         self.input_shape = input_shape
         #self.hidden_units = hidden_units
         #self.output_classes = output_classes
         self.d_model = d_model
+        self.phi=phi
         self.build_module()
 
     def build_module(self):
@@ -363,7 +366,7 @@ class cnnBackbone(nn.Module):
             ctr = strideList[i]
             while bottleneckRepeats[i] > 0:
                 print(f'Bottleneck_{i}_{bottleneckRepeats[i]}')
-                self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats[i]}'] = Bottleneck(input_shape=out.shape, k = 6, c = cList[i], n = bottleneckRepeats[i], s = ctr )
+                self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats[i]}'] = Bottleneck(input_shape=out.shape, k = 6, c = self.phi*cList[i], n = bottleneckRepeats[i], s = ctr )
                 ctr = ctr - 1 # creates the bottleneck
                 #runs the values through the created bottleneck as it was created
                 out = self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats[i]}'].forward(out)
@@ -504,7 +507,7 @@ class ECGTransformer(nn.Module):
 
 
 class Quite_Big_Model(nn.Module):
-    def __init__(self, input_shape ,d_model,transformer_heads,hidden_units,num_classes,N_q=6):
+    def __init__(self, input_shape ,d_model,transformer_heads,hidden_units,num_classes,N_q=6,phi=1):
         """
         Initializes a quite big model - cnn backbone into transformer into fully connected networks
         
@@ -520,6 +523,8 @@ class Quite_Big_Model(nn.Module):
             Number of hidden units in fully connected networks
         num_classes
             Number of classes to predict
+        phi
+            Hyperparameter indicating the scale of the CNN backbone
         """
         super(Quite_Big_Model,self).__init__()
         self.input_shape=input_shape
@@ -531,6 +536,7 @@ class Quite_Big_Model(nn.Module):
         self.hidden_units=hidden_units
         self.num_classes=num_classes
         self.N_q=N_q
+        self.phi=phi
 
         self.build_module()
         
@@ -540,7 +546,7 @@ class Quite_Big_Model(nn.Module):
         print(f"Initialising Quite A Big Model with input shape {self.input_shape}")
 
         #CNN Backbone
-        self.layer_dict["Cnn_Backbone"]=cnnBackbone(out.shape,self.d_model)
+        self.layer_dict["Cnn_Backbone"]=cnnBackbone(out.shape,self.d_model,phi=self.phi)
 
         out=self.layer_dict["Cnn_Backbone"].forward(out)
 
@@ -593,7 +599,8 @@ class Quite_Big_Model(nn.Module):
 
 
 class Quite_Big_Titan_Model(nn.Module):
-    def __init__(self, input_shape ,d_model,transformer_heads,hidden_units,num_classes,N_q=6):
+    def __init__(self, input_shape ,d_model,transformer_heads,hidden_units,num_classes,N_q=6,phi=1,
+                 nm_hu = 128,nm_kqv_size = 64,persistent_dim = 32,alpha = 0.1,nu = 0.9,theta = 0.3):
         """
         Initializes a quite big model - cnn backbone into transformer into fully connected networks
         
@@ -620,14 +627,15 @@ class Quite_Big_Titan_Model(nn.Module):
         self.hidden_units=hidden_units
         self.num_classes=num_classes
         self.N_q=N_q
+        self.phi=phi
 
         #to be made into arg_extractor later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        self.nm_hu = 128
-        self.nm_kqv_size = 64
-        self.persistent_dim = 32
-        self.alpha = 0.1 # past memory to forget
-        self.nu = 0.9 # surprise decay (how quickly past “surprise” fades)
-        self.theta = 0.3 # momentary surprise scaling
+        self.nm_hu = nm_hu
+        self.nm_kqv_size = nm_kqv_size
+        self.persistent_dim = persistent_dim
+        self.alpha = alpha # past memory to forget
+        self.nu = nu # surprise decay (how quickly past “surprise” fades)
+        self.theta = theta # momentary surprise scaling
 
         self.build_module()
         
@@ -637,7 +645,7 @@ class Quite_Big_Titan_Model(nn.Module):
         print(f"Initialising Quite A Big Model with input shape {self.input_shape}")
 
         #CNN Backbone
-        self.layer_dict["Cnn_Backbone"]=cnnBackbone(out.shape,self.d_model)
+        self.layer_dict["Cnn_Backbone"]=cnnBackbone(out.shape,self.d_model,phi=self.phi)
 
         out=self.layer_dict["Cnn_Backbone"].forward(out)
 

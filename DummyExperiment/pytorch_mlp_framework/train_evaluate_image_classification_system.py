@@ -88,7 +88,14 @@ model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,args.num_features],
                       d_model=6,
                       transformer_heads=args.transformer_heads,
                       hidden_units=args.hidden_units,
-                      num_classes=5)
+                      num_classes=5,
+                      phi=args.phi,
+                      nm_hu=args.nm_hu,
+                      nm_kqv_size=args.nm_kqv_size,
+                      persistent_dim=args.pers_dim,
+                      alpha=args.alpha,
+                      nu=args.nu,
+                      theta=args.theta)
 #model = Quite_Big_Titan_Model(input_shape=(args.batch_size, 1, args.num_features), hidden_units=64, output_classes=args.num_classes)
 
 # Build and run the experiment

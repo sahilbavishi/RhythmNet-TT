@@ -34,6 +34,15 @@ def get_args():
     parser.add_argument('--transformer_heads', nargs="?", type=int, default=1, help='Number of transformer heads')
     parser.add_argument('--hidden_units', nargs="?", type=int, default=12, help='Number of hidden units in final layer')
 
+    #Hyper-parameters specific to our model
+    parser.add_argument('--phi', nargs="?", type=float, default=1, help='Scale of CNN Backbone')
+    parser.add_argument('--alpha', nargs="?", type=float, default=0.1, help='Alpha for neural memory')
+    parser.add_argument('--nm_hu', nargs="?", type=int, default=128, help='Neural Memory hidden units')
+    parser.add_argument('--nm_kqv_size', nargs="?", type=int, default=64, help='Size of query/key/value in neural memory')
+    parser.add_argument('--pers_dim', nargs="?", type=int, default=32, help='Size of the persistent memory')
+    parser.add_argument('--nu', nargs="?", type=float, default=0.9, help='Nu for neural memory')
+    parser.add_argument('--theta', nargs="?", type=float, default=0.3, help='Theta for neural memory')
+
     args = parser.parse_args()
     print(args)
     return args
