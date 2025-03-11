@@ -366,7 +366,7 @@ class cnnBackbone(nn.Module):
             ctr = strideList[i]
             while bottleneckRepeats[i] > 0:
                 print(f'Bottleneck_{i}_{bottleneckRepeats[i]}')
-                self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats[i]}'] = Bottleneck(input_shape=out.shape, k = 6, c = self.phi*cList[i], n = bottleneckRepeats[i], s = ctr )
+                self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats[i]}'] = Bottleneck(input_shape=out.shape, k = 6, c = int(self.phi*cList[i]), n = bottleneckRepeats[i], s = ctr )
                 ctr = ctr - 1 # creates the bottleneck
                 #runs the values through the created bottleneck as it was created
                 out = self.layer_dict[f'Bottleneck_{i}_{bottleneckRepeats[i]}'].forward(out)
