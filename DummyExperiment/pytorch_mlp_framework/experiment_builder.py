@@ -23,11 +23,11 @@ class ExperimentBuilder(nn.Module):
         self.experiment_name = experiment_name
         self.model = network_model
 
-        def zero_grad_hook(grad):
-            return torch.zeros_like(grad)
-        # Register hooks on Neural Memory parameters to zero out outer loss gradients.
-        for param in self.model.layer_dict["Neural_Memory"].parameters():
-            param.register_hook(zero_grad_hook)
+        # def zero_grad_hook(grad):
+        #     return torch.zeros_like(grad)
+        # # Register hooks on Neural Memory parameters to zero out outer loss gradients.
+        # for param in self.model.layer_dict["Neural_Memory"].parameters():
+        #     param.register_hook(zero_grad_hook)
 
         if torch.cuda.device_count() >= 1 and use_gpu:
             self.device = torch.device('cuda')
@@ -78,7 +78,7 @@ class ExperimentBuilder(nn.Module):
         self.WindowMaker = CreateHeartbeatWindow(maxtimeframe=1,sigma=0.4,device=self.device).to(self.device)
 
         if continue_from_epoch >= 0:
-            self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_model(
+            self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_pretrained_model(
                 self.experiment_saved_models, "train_model", continue_from_epoch
             )
             self.starting_epoch = continue_from_epoch
@@ -110,8 +110,8 @@ class ExperimentBuilder(nn.Module):
         loss = ClassLoss+PosLoss
         self.optimizer.zero_grad()
         loss.backward()
-        self.model.layer_dict["Neural_Memory"].apply_cached_updates()
-        self.model.layer_dict["Neural_Memory"].reset_computational_history()
+        # self.model.layer_dict["Neural_Memory"].apply_cached_updates()
+        # self.model.layer_dict["Neural_Memory"].reset_computational_history()
         self.optimizer.step()
         self.learning_rate_scheduler.step()
 
@@ -129,8 +129,8 @@ class ExperimentBuilder(nn.Module):
         x, y = x.float().to(self.device), y.float().to(self.device)
         with torch.set_grad_enabled(True):  # Enable gradients for surprise computation
             output = self.model(x)
-            self.model.layer_dict["Neural_Memory"].apply_cached_updates()
-            self.model.layer_dict["Neural_Memory"].reset_computational_history()
+            # self.model.layer_dict["Neural_Memory"].apply_cached_updates()
+            # self.model.layer_dict["Neural_Memory"].reset_computational_history()
 
         # Get predictions and ground truths
         predicted_classes=torch.argmax(output[:,:,:-2],dim=-1) # [batch, num_pred]
@@ -175,6 +175,65 @@ class ExperimentBuilder(nn.Module):
         self.model.load_state_dict(state['network'])
         self.optimizer.load_state_dict(state['optimizer'])
         return state, state['best_val_model_idx'], state['best_val_model_acc']
+
+    # def load_pretrained_model(self, model_dir, model_name, epoch):
+    #     model_path = os.path.join(model_dir, f"{model_name}_{epoch}.pth")
+    #     state = torch.load(model_path, weights_only=False)
+
+    #     self.model.load_state_dict(state['network'], strict=False)
+    #     self.optimizer.load_state_dict(state['optimizer'])
+
+    #     self.model.layer_dict["FullyConnected"].reset_parameters()
+    #     return state, state['best_val_model_idx'], state['best_val_model_acc']
+
+
+
+
+
+
+
+    def load_pretrained_model(self, model_dir, model_name, epoch, new_num_classes=5, device="cuda"):
+        model_path = os.path.join(model_dir, f"{model_name}_{epoch}.pth")
+        
+        # Ensure the state dict is loaded on the correct device
+        state = torch.load(model_path, map_location=torch.device(device))
+
+        # Identify and remove mismatched layers (final classification layer)
+        keys_to_remove = []
+        for key in state['network'].keys():
+            if "FullyConnected.layer_dict.Classification.layer_dict.FF1" in key:
+                keys_to_remove.append(key)
+
+        for key in keys_to_remove:
+            del state['network'][key]
+        
+        print(f"Removed mismatched keys: {keys_to_remove}")
+
+        # Ensure the entire model is on the correct device
+        self.model.to(device)
+
+        # Replace the final layer with the correct number of output classes
+        fully_connected_module = self.model.layer_dict["FullyConnected"]
+        classification_module = fully_connected_module.layer_dict["Classification"]
+
+        old_fc = classification_module.layer_dict["FF1"]
+        if isinstance(old_fc, nn.Linear):  
+            num_features = old_fc.in_features
+            classification_module.layer_dict["FF1"] = nn.Linear(num_features, new_num_classes).to(device)
+            classification_module.layer_dict["FF1"].reset_parameters()
+
+        # Load model weights with strict=False to allow new layers
+        self.model.load_state_dict(state['network'], strict=False)
+
+        # Reset optimizer to avoid mismatched state issues
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+
+        return state, state.get('best_val_model_idx', -1), state.get('best_val_model_acc', 0.0)
+
+
+
+
+
 
     def run_experiment(self):
         total_losses = {"train_acc": [], "train_loss": [], "train_precision": [], "train_recall": [], "train_f1": [],

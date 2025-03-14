@@ -46,6 +46,39 @@ def ConvertClassandPos(Yinput):
     Yret=np.append(Onehotted,Yinput[:,1][:,np.newaxis]/labelcol,axis=1) #divide by labelcol, to make the positions range from 0 to 1
     return Yret[:,np.newaxis,:]
 
+# def One_Hot(Input):
+#     """Function to one-hot encode a 1xn numpy array, returns an nx3 encoded variable"""
+    
+#     # Convert values to string for consistency
+#     Input = Input.astype(str)
+    
+#     # Define class categories
+#     Classes = np.array(["N", "0", "NA"])[:, np.newaxis]  # "N" = Normal, "0" = AFIB, "NA" = Unclassified
+
+#     # Replace integer 0 with "NA"
+#     Input[Input == "0.0"] = "0"  # Ensure "0" (string) stays the same
+#     Input[Input == "0"] = "NA"   # Convert integer 0 to "NA"
+    
+#     return Classes.T == Input[:, np.newaxis]  # One-hot encode
+
+# def ConvertClassandPos(Yinput):
+#     """
+#     Converts classification data into a format the model can predict.
+
+#     Inputs
+#     ------
+#     Yinput: An array with two columns - one for classification labels, another for position (size: [n,2])
+
+#     Returns
+#     -------
+#     An array of size [n,1,4] - one hot encoded (3 classes) with position at the end (making it 4)
+#     """
+#     Onehotted = One_Hot(Yinput[:, 0])  # Shape: (n, 3)
+#     Yret = np.append(Onehotted, Yinput[:, 1][:, np.newaxis] / labelcol, axis=1)  # Append position as 4th column
+
+#     return Yret[:, np.newaxis, :]  # Shape: (n, 1, 4) → (batch, num_gt, 4)
+
+
 Y=ConvertClassandPos(Yvals[:,:2]) #Convert classification
 
 for i in range(2,int(Yvals.shape[1]),2):
@@ -96,18 +129,34 @@ val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), b
 test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=args.batch_size, shuffle=False)
 # Define the model
 # model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
-model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,args.num_features],
+# model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,args.num_features],
+#                       d_model=6,
+#                       transformer_heads=args.transformer_heads,
+#                       hidden_units=args.hidden_units,
+#                       num_classes=5,
+#                       phi=args.phi,
+#                       nm_hu=args.nm_hu,
+#                       nm_kqv_size=args.nm_kqv_size,
+#                       persistent_dim=args.pers_dim,
+#                       alpha=args.alpha,
+#                       nu=args.nu,
+#                       theta=args.theta)
+
+
+model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
                       d_model=6,
                       transformer_heads=args.transformer_heads,
                       hidden_units=args.hidden_units,
                       num_classes=5,
-                      phi=args.phi,
-                      nm_hu=args.nm_hu,
-                      nm_kqv_size=args.nm_kqv_size,
-                      persistent_dim=args.pers_dim,
-                      alpha=args.alpha,
-                      nu=args.nu,
-                      theta=args.theta)
+                      )
+
+# model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
+#                       d_model=6,
+#                       transformer_heads=args.transformer_heads,
+#                       hidden_units=args.hidden_units,
+#                       num_classes=5,
+#                       )
+
 #model = Quite_Big_Titan_Model(input_shape=(args.batch_size, 1, args.num_features), hidden_units=64, output_classes=args.num_classes)
 
 # Build and run the experiment
