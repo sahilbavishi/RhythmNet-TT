@@ -78,6 +78,18 @@ y_val = np.array(y_val, dtype=np.float32)
 X_test = np.array(X_test, dtype=np.float32)
 y_test = np.array(y_test, dtype=np.float32)
 
+#Normalise Data
+def NormData(train,val,test):
+    mu=np.mean(train)
+    sig=np.std(train)
+    train=(train-mu)/sig
+    val=(val-mu)/sig
+    test=(test-mu)/sig
+    return train,val,test
+
+X_train,X_val,X_test=NormData(X_train,X_val,X_test)
+
+
 # Create DataLoaders
 train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(y_train)), batch_size=args.batch_size, shuffle=True)
 val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), batch_size=args.batch_size, shuffle=False)
