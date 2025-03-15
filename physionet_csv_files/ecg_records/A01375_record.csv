@@ -1,2 +1,0 @@
-"record_name, n_leads, sig_len, ftm, skew, byte_offset, adc_gain, baseline, units, adc_res, adc_zero, init_value, checksum, block_size"
-"A01375, 1 18000, ['16'], [None], [24], [1000.0], [0], ['mV'], [16], [0], [8], [0], [0]"
