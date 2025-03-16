@@ -23,9 +23,9 @@ class ExperimentBuilder(nn.Module):
         self.experiment_name = experiment_name
         self.model = network_model
 
-        # def zero_grad_hook(grad):
-        #     return torch.zeros_like(grad)
-        # # Register hooks on Neural Memory parameters to zero out outer loss gradients.
+        def zero_grad_hook(grad):
+            return torch.zeros_like(grad)
+        # Register hooks on Neural Memory parameters to zero out outer loss gradients.
         # for param in self.model.layer_dict["Neural_Memory"].parameters():
         #     param.register_hook(zero_grad_hook)
 

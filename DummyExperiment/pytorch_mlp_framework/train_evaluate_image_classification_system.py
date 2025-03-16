@@ -48,35 +48,28 @@ def ConvertClassandPos(Yinput):
 
 # def One_Hot(Input):
 #     """Function to one-hot encode a 1xn numpy array, returns an nx3 encoded variable"""
-    
-#     # Convert values to string for consistency
-#     Input = Input.astype(str)
-    
-#     # Define class categories
-#     Classes = np.array(["N", "0", "NA"])[:, np.newaxis]  # "N" = Normal, "0" = AFIB, "NA" = Unclassified
-
-#     # Replace integer 0 with "NA"
-#     Input[Input == "0.0"] = "0"  # Ensure "0" (string) stays the same
-#     Input[Input == "0"] = "NA"   # Convert integer 0 to "NA"
-    
-#     return Classes.T == Input[:, np.newaxis]  # One-hot encode
+#     np.putmask(Input, Input == "0", "NA")  # Replace '0' with 'NA'
+#     np.putmask(Input, (Input != "N") & (Input != "AFIB") & (Input != "NA"), "NA")  # Ensure only valid labels
+#     Classes = np.array(["N", "AFIB", "NA"])[:, np.newaxis]  # Defined categories
+#     return Classes.T == Input[:, np.newaxis]
 
 # def ConvertClassandPos(Yinput):
 #     """
-#     Converts classification data into a format the model can predict.
+#     Converts our classification data into something the model can predict
 
 #     Inputs
 #     ------
-#     Yinput: An array with two columns - one for classification labels, another for position (size: [n,2])
+#     Yinput: An array including two columns - one of the string classification, another with the position (size: [n,2])
 
 #     Returns
 #     -------
-#     An array of size [n,1,4] - one hot encoded (3 classes) with position at the end (making it 4)
+#     An array of size [n,1,4] - one hot encoded with position at end (the 4)
 #     """
-#     Onehotted = One_Hot(Yinput[:, 0])  # Shape: (n, 3)
-#     Yret = np.append(Onehotted, Yinput[:, 1][:, np.newaxis] / labelcol, axis=1)  # Append position as 4th column
+#     Onehotted = One_Hot(Yinput[:, 0])
+#     Yret = np.append(Onehotted, Yinput[:, 1][:, np.newaxis], axis=1)  # Keep position unchanged
+#     return Yret[:, np.newaxis, :]
 
-#     return Yret[:, np.newaxis, :]  # Shape: (n, 1, 4) → (batch, num_gt, 4)
+
 
 
 Y=ConvertClassandPos(Yvals[:,:2]) #Convert classification
@@ -157,7 +150,7 @@ model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
 #                       num_classes=5,
 #                       )
 
-#model = Quite_Big_Titan_Model(input_shape=(args.batch_size, 1, args.num_features), hidden_units=64, output_classes=args.num_classes)
+# model = Quite_Big_Titan_Model(input_shape=(args.batch_size, 1, args.num_features), hidden_units=64, output_classes=3)
 
 # Build and run the experiment
 experiment = ExperimentBuilder(network_model=model,

@@ -30,6 +30,9 @@ def save_statistics(experiment_log_dir, filename, stats_dict, current_epoch, con
     """
     summary_filename = os.path.join(experiment_log_dir, filename)
     mode = 'a' if continue_from_mode else 'w'
+
+    # mode = 'w'
+
     with open(summary_filename, mode) as f:
         writer = csv.writer(f)
         if not continue_from_mode:
