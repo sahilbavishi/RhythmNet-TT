@@ -33,6 +33,7 @@ def get_args():
     parser.add_argument('--use_gpu', nargs="?", type=str2bool, default=True, help='Flag to use GPU if available')
     parser.add_argument('--transformer_heads', nargs="?", type=int, default=1, help='Number of transformer heads')
     parser.add_argument('--hidden_units', nargs="?", type=int, default=12, help='Number of hidden units in final layer')
+    parser.add_argument('--is_titan',nargs="?", type=bool, default=False, help='True if we are using a titan model')
 
     #Hyper-parameters specific to our model
     parser.add_argument('--phi', nargs="?", type=float, default=1, help='Scale of CNN Backbone')

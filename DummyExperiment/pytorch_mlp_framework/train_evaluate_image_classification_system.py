@@ -122,26 +122,26 @@ val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), b
 test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=args.batch_size, shuffle=False)
 # Define the model
 # model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
-# model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,args.num_features],
-#                       d_model=6,
-#                       transformer_heads=args.transformer_heads,
-#                       hidden_units=args.hidden_units,
-#                       num_classes=5,
-#                       phi=args.phi,
-#                       nm_hu=args.nm_hu,
-#                       nm_kqv_size=args.nm_kqv_size,
-#                       persistent_dim=args.pers_dim,
-#                       alpha=args.alpha,
-#                       nu=args.nu,
-#                       theta=args.theta)
-
-
-model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
-                      d_model=6,
-                      transformer_heads=args.transformer_heads,
-                      hidden_units=args.hidden_units,
-                      num_classes=5,
-                      )
+if args.is_titan:#Check if the model is the titan model
+    model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,args.num_features],
+                                d_model=6,
+                                transformer_heads=args.transformer_heads,
+                                hidden_units=args.hidden_units,
+                                num_classes=5,
+                                phi=args.phi,
+                                nm_hu=args.nm_hu,
+                                nm_kqv_size=args.nm_kqv_size,
+                                persistent_dim=args.pers_dim,
+                                alpha=args.alpha,
+                                nu=args.nu,
+                                theta=args.theta)
+else:
+    model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
+                        d_model=6,
+                        transformer_heads=args.transformer_heads,
+                        hidden_units=args.hidden_units,
+                        num_classes=5,
+                        )
 
 # model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
 #                       d_model=6,
