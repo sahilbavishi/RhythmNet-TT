@@ -71,6 +71,22 @@ df=df[df[TimeFrame+(1+MaxNumofAnnotations)*2]==0] #Gets rid of any lines that ar
 
 df=df.loc[:, (df != 0).any(axis=0)]
 
+#I am also going to remove the lines with unclassifiable beats
+
+
+JustAnnotations=df.iloc[:,1080:]
+print("Orig length before cuts:",JustAnnotations.shape[0])
+usefulDataIndex=0
+for i in range(0,12,2):
+    udi=(JustAnnotations.iloc[:,0]=="N")+(JustAnnotations.iloc[:,0]=="L")+(JustAnnotations.iloc[:,0]=="R")+(JustAnnotations.iloc[:,0]=="j")+(JustAnnotations.iloc[:,0]=="e")+(JustAnnotations.iloc[:,0]=="A")+(JustAnnotations.iloc[:,0]=="a")+(JustAnnotations.iloc[:,0]=="S")+(JustAnnotations.iloc[:,0]=="J")+(JustAnnotations.iloc[:,0]=="!")+(JustAnnotations.iloc[:,0]=="V")+(JustAnnotations.iloc[:,0]=="E")+(JustAnnotations.iloc[:,0]=="[")+(JustAnnotations.iloc[:,0]=="]")+(JustAnnotations.iloc[:,0]=="F")
+    if i==0:
+        usefulDataIndex=np.array(udi)
+    else:
+        usefulDataIndex=usefulDataIndex*np.array(udi)
+
+print("Reduction: ",sum(usefulDataIndex)/df.shape[0])
+df=df[usefulDataIndex==True]
+print("resulting length: ",df.shape[0])
 
 #Save it
 df.to_csv("MIT3sec.csv")
