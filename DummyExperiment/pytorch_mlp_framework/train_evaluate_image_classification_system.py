@@ -21,53 +21,56 @@ X=ecg_data.iloc[:,1:labelcol].values #All columns up to the labels
 
 Yvals=np.array(ecg_data.iloc[:,labelcol:].values) #All the labels
 
-def One_Hot(Input):
-    """Function to one-hot encode a 1xn numpy array, returns an nx4 encoded variable"""
-    np.putmask(Input,(Input=="L")+(Input=="R")+(Input=="j")+(Input=="e"),"N")#Replace the multiple labels that mean `N` with N
-    np.putmask(Input,(Input=="A")+(Input=="a")+(Input=="S")+(Input=="J"),"S")#Replace the multiple labels that mean `S` with S
-    np.putmask(Input,(Input=="!")+(Input=="V")+(Input=="E")+(Input=="[")+(Input=="]"),"V")#Replace the multiple labels that mean `V` with V
-    np.putmask(Input,(Input!="N")*(Input!="S")*(Input!="V")*(Input!="F"),"NA")#Replace the multiple labels that should be unclassified with 0
-    Classes=np.array(["N","S","V","F","NA"])[:,np.newaxis] #N,S,V,F and empty classes
-    return Classes.T==Input[:,np.newaxis]
+#Depending on pre-training or not, we need a different one-hot encoding
+if not args.is_pretrain: #If we are not pretraining, then we do the 5 class one-hot
+    def One_Hot(Input):
+        """Function to one-hot encode a 1xn numpy array, returns an nx4 encoded variable"""
+        np.putmask(Input,(Input=="L")+(Input=="R")+(Input=="j")+(Input=="e"),"N")#Replace the multiple labels that mean `N` with N
+        np.putmask(Input,(Input=="A")+(Input=="a")+(Input=="S")+(Input=="J"),"S")#Replace the multiple labels that mean `S` with S
+        np.putmask(Input,(Input=="!")+(Input=="V")+(Input=="E")+(Input=="[")+(Input=="]"),"V")#Replace the multiple labels that mean `V` with V
+        np.putmask(Input,(Input!="N")*(Input!="S")*(Input!="V")*(Input!="F"),"NA")#Replace the multiple labels that should be unclassified with 0
+        Classes=np.array(["N","S","V","F","NA"])[:,np.newaxis] #N,S,V,F and empty classes
+        return Classes.T==Input[:,np.newaxis]
 
-def ConvertClassandPos(Yinput):
-    """
-    Converts our classification data into something the model can predict
+    def ConvertClassandPos(Yinput):
+        """
+        Converts our classification data into something the model can predict
 
-    Inputs
-    ------
-    Yinput: An array including two columns - one of the string classification, another with the position (size: [n,2])
+        Inputs
+        ------
+        Yinput: An array including two columns - one of the string classification, another with the position (size: [n,2])
 
-    Returns
-    -------
-    An array of size [n,1,6] - one hot encoded with position at end (the 6)
-    """
-    Onehotted=One_Hot(Yinput[:,0])
-    Yret=np.append(Onehotted,Yinput[:,1][:,np.newaxis]/labelcol,axis=1) #divide by labelcol, to make the positions range from 0 to 1
-    return Yret[:,np.newaxis,:]
+        Returns
+        -------
+        An array of size [n,1,6] - one hot encoded with position at end (the 6)
+        """
+        Onehotted=One_Hot(Yinput[:,0])
+        Yret=np.append(Onehotted,Yinput[:,1][:,np.newaxis]/labelcol,axis=1) #divide by labelcol, to make the positions range from 0 to 1
+        return Yret[:,np.newaxis,:]
+    num_classes=5
+else:
+    def One_Hot(Input):
+        """Function to one-hot encode a 1xn numpy array, returns an nx3 encoded variable"""
+        np.putmask(Input, Input == "0", "NA")  # Replace '0' with 'NA'
+        np.putmask(Input, (Input != "N") & (Input != "AFIB") & (Input != "NA"), "NA")  # Ensure only valid labels
+        Classes = np.array(["N", "AFIB", "NA"])[:, np.newaxis]  # Defined categories
+        return Classes.T == Input[:, np.newaxis]
 
-# def One_Hot(Input):
-#     """Function to one-hot encode a 1xn numpy array, returns an nx3 encoded variable"""
-#     np.putmask(Input, Input == "0", "NA")  # Replace '0' with 'NA'
-#     np.putmask(Input, (Input != "N") & (Input != "AFIB") & (Input != "NA"), "NA")  # Ensure only valid labels
-#     Classes = np.array(["N", "AFIB", "NA"])[:, np.newaxis]  # Defined categories
-#     return Classes.T == Input[:, np.newaxis]
+    def ConvertClassandPos(Yinput):
+        """
+        Converts our classification data into something the model can predict
 
-# def ConvertClassandPos(Yinput):
-#     """
-#     Converts our classification data into something the model can predict
-
-#     Inputs
-#     ------
-#     Yinput: An array including two columns - one of the string classification, another with the position (size: [n,2])
-
-#     Returns
-#     -------
-#     An array of size [n,1,4] - one hot encoded with position at end (the 4)
-#     """
-#     Onehotted = One_Hot(Yinput[:, 0])
-#     Yret = np.append(Onehotted, Yinput[:, 1][:, np.newaxis], axis=1)  # Keep position unchanged
-#     return Yret[:, np.newaxis, :]
+        Inputs
+        ------
+        Yinput: An array including two columns - one of the string classification, another with the position (size: [n,2])
+        Returns
+        -------
+        An array of size [n,1,4] - one hot encoded with position at end (the 4)
+        """
+        Onehotted = One_Hot(Yinput[:, 0])
+        Yret = np.append(Onehotted, Yinput[:, 1][:, np.newaxis], axis=1)  # Keep position unchanged
+        return Yret[:, np.newaxis, :]
+    num_classes=3
 
 
 
@@ -127,7 +130,7 @@ if args.is_titan:#Check if the model is the titan model
                                 d_model=6,
                                 transformer_heads=args.transformer_heads,
                                 hidden_units=args.hidden_units,
-                                num_classes=5,
+                                num_classes=num_classes,
                                 phi=args.phi,
                                 nm_hu=args.nm_hu,
                                 nm_kqv_size=args.nm_kqv_size,
@@ -140,7 +143,7 @@ else:
                         d_model=6,
                         transformer_heads=args.transformer_heads,
                         hidden_units=args.hidden_units,
-                        num_classes=5,
+                        num_classes=num_classes,
                         )
 
 # model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],

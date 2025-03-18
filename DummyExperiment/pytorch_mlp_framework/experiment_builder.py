@@ -26,8 +26,8 @@ class ExperimentBuilder(nn.Module):
         def zero_grad_hook(grad):
             return torch.zeros_like(grad)
         # Register hooks on Neural Memory parameters to zero out outer loss gradients.
-        # for param in self.model.layer_dict["Neural_Memory"].parameters():
-        #     param.register_hook(zero_grad_hook)
+        for param in self.model.layer_dict["Neural_Memory"].parameters():
+            param.register_hook(zero_grad_hook)
 
         if torch.cuda.device_count() >= 1 and use_gpu:
             self.device = torch.device('cuda')
@@ -41,6 +41,8 @@ class ExperimentBuilder(nn.Module):
         self.train_data = train_data
         self.val_data = val_data
         self.test_data = test_data
+        self.learning_rate=learning_rate
+        self.weight_decay=weight_decay_coefficient
 
         '''old learning rate scheduler
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=weight_decay_coefficient)
@@ -106,14 +108,13 @@ class ExperimentBuilder(nn.Module):
         
         #Loss calculations
         ClassLoss=self.classifier_criterion(output[:,:,:-2], y[:,:,:-1].type(torch.float32))
-        PosLoss=self.position_criterion1(predicted_positions, TargetWindows)+self.position_criterion2(predicted_positions,TargetWindows)
-        loss = ClassLoss+PosLoss
+        PosLoss=4*self.position_criterion1(predicted_positions, TargetWindows)+self.position_criterion2(predicted_positions,TargetWindows)
+        loss = 8*ClassLoss+PosLoss
         self.optimizer.zero_grad()
         loss.backward()
-        # self.model.layer_dict["Neural_Memory"].apply_cached_updates()
-        # self.model.layer_dict["Neural_Memory"].reset_computational_history()
+        self.model.layer_dict["Neural_Memory"].apply_cached_updates()
+        self.model.layer_dict["Neural_Memory"].reset_computational_history()
         self.optimizer.step()
-        self.learning_rate_scheduler.step()
 
         #Metrics calculations
         TP, TN, FP, FN = get_TP_TN_FP_FN(predicted_classes, real_classes, num_classes=5,device=self.device)
@@ -196,7 +197,7 @@ class ExperimentBuilder(nn.Module):
         model_path = os.path.join(model_dir, f"{model_name}_{epoch}.pth")
         
         # Ensure the state dict is loaded on the correct device
-        state = torch.load(model_path, map_location=torch.device(device))
+        state = torch.load(model_path, map_location=torch.device(device),weights_only=False)
 
         # Identify and remove mismatched layers (final classification layer)
         keys_to_remove = []
@@ -226,9 +227,9 @@ class ExperimentBuilder(nn.Module):
         self.model.load_state_dict(state['network'], strict=False)
 
         # Reset optimizer to avoid mismatched state issues
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
 
-        return state, state.get('best_val_model_idx', -1), state.get('best_val_model_acc', 0.0)
+        return state, 0, 0 #state.get('best_val_model_idx', -1), state.get('best_val_model_acc', 0.0)
 
 
 
@@ -264,8 +265,8 @@ class ExperimentBuilder(nn.Module):
 
                     pbar.update(1)
                     pbar.set_description(f"Epoch {epoch} - Loss: {loss:.4f}, Acc: {acc['micro_avg_accuracy']:.4f}, F1: {f1['macro_avg_f1']:.4f}")
-            if self.device==torch.device('cuda'): #Try to save some memory
-                torch.cuda.empty_cache()
+            #Step the learning rate scheduler after the epoch has run
+            self.learning_rate_scheduler.step()
 
             self.eval()
             with torch.no_grad():
