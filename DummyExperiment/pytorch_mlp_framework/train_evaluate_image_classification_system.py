@@ -13,7 +13,8 @@ rng = np.random.RandomState(seed=args.seed)  # set the seeds for the experiment
 torch.manual_seed(seed=args.seed)  # sets pytorch's seed
 ecg_data = pd.read_csv(args.dataset_path)
 
-
+is_titan=args.is_titan
+is_pretrain=args.is_pretrain
 
 labelcol=int(ecg_data.select_dtypes(include=["object"]).columns[0])+1 #First column with a label in
 
@@ -125,7 +126,7 @@ val_data = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), b
 test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=args.batch_size, shuffle=False)
 # Define the model
 # model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
-if args.is_titan:#Check if the model is the titan model
+if is_titan:#Check if the model is the titan model
     model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,args.num_features],
                                 d_model=6,
                                 transformer_heads=args.transformer_heads,
@@ -165,5 +166,7 @@ experiment = ExperimentBuilder(network_model=model,
                                 continue_from_epoch=args.continue_from_epoch,
                                 train_data=train_data,
                                 val_data=val_data,
-                                test_data=test_data)
+                                test_data=test_data,
+                                is_titan=is_titan,
+                                is_pretrain=is_pretrain)
 experiment_metrics, test_metrics = experiment.run_experiment()
