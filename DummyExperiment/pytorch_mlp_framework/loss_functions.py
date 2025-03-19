@@ -103,9 +103,7 @@ class GboxIoULoss(nn.Module):
         Area=torch.max(tgt2,out2)-torch.min(tgt1,out1) #This is the shortest area that encompases both windows
 
         #Calc loss
-        if Union>0:
-            Loss=1-(Intersection/Union-(Area-Union)/(Area+self.delta))
-        else:
-            Loss=1-((Area-Union)/(Area+self.delta))
+        Loss=1-(Intersection/Union-(Area-Union)/(Area+self.delta))
+        
 
-        return torch.sum(Loss) #Return the sum of all the losses 
+        return torch.nansum(Loss) #Return the sum of all the losses 
