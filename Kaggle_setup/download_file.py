@@ -4,8 +4,10 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 api = KaggleApi()
 api.authenticate()
 
+seconds=3 #Change the number of seconds to the one you want to download
+
 # The dataset loaction on kaggle
-dataset = 'dataforlyf/mit-af-3seconds'  
+dataset = f'dataforlyf/mit-af-{seconds}seconds' 
 
 download_path = '/home/s2742733/mlp/MLP_CW'  # Change to your location on the drive
 
