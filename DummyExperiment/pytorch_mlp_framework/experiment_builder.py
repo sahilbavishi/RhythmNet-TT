@@ -17,7 +17,7 @@ from loss_functions import FocalLoss, CreateHeartbeatWindow, GboxIoULoss
 
 class ExperimentBuilder(nn.Module):
     def __init__(self, network_model, experiment_name, num_epochs, train_data, val_data,
-                 test_data, weight_decay_coefficient, learning_rate, use_gpu, continue_from_epoch=-1, is_titan=False,is_pretrain=False):
+                 test_data, weight_decay_coefficient, learning_rate, use_gpu, continue_from_epoch=-1, is_titan=False,is_pretrain=False,actually_continue=False):
         super(ExperimentBuilder, self).__init__()
 
         self.experiment_name = experiment_name
@@ -83,10 +83,16 @@ class ExperimentBuilder(nn.Module):
 
         self.is_pretrain=is_pretrain
         if continue_from_epoch >= 0:
-            self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_pretrained_model(
-                self.experiment_saved_models, "train_model", continue_from_epoch
-            )
-            self.starting_epoch = continue_from_epoch
+            if actually_continue:
+                self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_model(
+                    self.experiment_saved_models, "train_model", continue_from_epoch
+                )
+                self.starting_epoch = continue_from_epoch
+            else:
+                self.state, self.best_val_model_idx, self.best_val_model_acc = self.load_pretrained_model(
+                    self.experiment_saved_models, "train_model", continue_from_epoch
+                )
+                self.starting_epoch = continue_from_epoch
         else:
             self.state = {}
             self.starting_epoch = 0

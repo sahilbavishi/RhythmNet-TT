@@ -168,5 +168,6 @@ experiment = ExperimentBuilder(network_model=model,
                                 val_data=val_data,
                                 test_data=test_data,
                                 is_titan=is_titan,
-                                is_pretrain=is_pretrain)
+                                is_pretrain=is_pretrain,
+                                actually_continue=args.actually_continue)
 experiment_metrics, test_metrics = experiment.run_experiment()
