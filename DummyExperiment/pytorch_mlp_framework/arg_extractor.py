@@ -27,6 +27,7 @@ def get_args():
                         help='Weight decay to use for Adam')
     # Experiment parameters
     parser.add_argument('--continue_from_epoch', nargs="?", type=int, default=-1, help='Epoch to resume training from')
+    parser.add_argument('--actually_continue', nargs="?", type=str2bool, default=False, help='True if we are not starting a fine-tune')
     parser.add_argument('--seed', nargs="?", type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--experiment_name', nargs="?", type=str, default="ecg_experiment",
                         help='Name of the experiment (used for folder creation)')
