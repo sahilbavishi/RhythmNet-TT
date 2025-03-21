@@ -127,11 +127,12 @@ test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test))
 # Define the model
 # model = FullyConnectedNetwork(input_features=args.num_features, hidden_units=64, output_classes=args.num_classes)
 if is_titan:#Check if the model is the titan model
-    model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,args.num_features],
+    model=Quite_Big_Titan_Model(input_shape=[args.batch_size,1,labelcol-1],
                                 d_model=6,
                                 transformer_heads=args.transformer_heads,
                                 hidden_units=args.hidden_units,
                                 num_classes=num_classes,
+                                N_q=Yvals.shape[1]//2,
                                 phi=args.phi,
                                 nm_hu=args.nm_hu,
                                 nm_kqv_size=args.nm_kqv_size,
@@ -140,11 +141,12 @@ if is_titan:#Check if the model is the titan model
                                 nu=args.nu,
                                 theta=args.theta)
 else:
-    model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],
+    model=Quite_Big_Model(input_shape=[args.batch_size,1,labelcol-1],
                         d_model=6,
                         transformer_heads=args.transformer_heads,
                         hidden_units=args.hidden_units,
                         num_classes=num_classes,
+                        N_q=Yvals.shape[1]//2
                         )
 
 # model=Quite_Big_Model(input_shape=[args.batch_size,1,args.num_features],

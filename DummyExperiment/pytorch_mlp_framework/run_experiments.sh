@@ -19,4 +19,4 @@ conda activate mlp
 
 
 
-python train_evaluate_image_classification_system.py --batch_size 32 --is_titan False  --continue_from_epoch 199 --actually_continue True --learning_rate 0.0001   --num_epochs 400   --experiment_name PostBaseModel0001TH6HU24 --use_gpu True --transformer_heads 6 --hidden_units 24 --phi 1 --dataset_path "/home/s2742733/mlp/MLP_CW/MIT3sec.csv"
+python train_evaluate_image_classification_system.py --batch_size 32 --is_titan True  --continue_from_epoch 0 --actually_continue False --learning_rate 0.0001   --num_epochs 400   --experiment_name PostTitanModel0001TH6HU24 --use_gpu True --transformer_heads 6 --hidden_units 24 --phi 1 --dataset_path "/home/s2742733/mlp/MLP_CW/MIT3sec.csv"
