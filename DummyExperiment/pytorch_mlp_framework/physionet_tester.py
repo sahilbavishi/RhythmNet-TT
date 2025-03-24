@@ -102,10 +102,12 @@ else:
                                 theta=args.theta)
 
 
+device=torch.device('cuda')
 
-state=torch.load(fileName,weights_only=False,map_location=torch.device('cpu'))
+state=torch.load(fileName,weights_only=False,map_location=device)
 model.load_state_dict(state['network']) #Load the model state
 
+model.to(device)
 
 #Now we can have a look at the performace on the physionet stuff
 physionetFile=f"{MLP_path}/MLP_CW/physionet_csv_files/ecg_records/"
@@ -194,7 +196,7 @@ elif timespan==15:
 
 for anno_index,recording_num in tqdm.tqdm(enumerate(annotations["Recording"]),total=len(annotations["Recording"])):
     dataFile=physionetFile+f"{recording_num}_{timespan}secs_ecg.csv"
-    data=torch.tensor(np.array(pd.read_csv(dataFile)),dtype=torch.float32)
+    data=torch.tensor(np.array(pd.read_csv(dataFile)),dtype=torch.float32,device=device)
     
     data=(data-mu)/sigma #Normalise the data
     #print(data.type())
